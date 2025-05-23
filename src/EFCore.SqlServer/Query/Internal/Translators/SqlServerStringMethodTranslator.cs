@@ -7,7 +7,7 @@ using CharTypeMapping = Microsoft.EntityFrameworkCore.Storage.CharTypeMapping;
 using ExpressionExtensions = Microsoft.EntityFrameworkCore.Query.ExpressionExtensions;
 
 // ReSharper disable once CheckNamespace
-namespace Microsoft.EntityFrameworkCore.SqlServer.Query.Internal;
+
 
 /// <summary>
 ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to

@@ -45,7 +45,7 @@ public class SqlFunctionExpression : SqlExpression
         : base(type, typeMapping)
     {
         Name = name;
-        Arguments = arguments.ToList();
+        Arguments = [.. arguments];
         IsScoringFunction = isScoringFunction;
     }
 

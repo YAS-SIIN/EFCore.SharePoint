@@ -1,7 +1,6 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore.Cosmos.Diagnostics.Internal;
 using Microsoft.EntityFrameworkCore.Cosmos.Internal;
 using Microsoft.EntityFrameworkCore.Cosmos.Metadata.Internal;
@@ -84,6 +83,14 @@ public class CosmosModelValidator : ModelValidator
 
             foreach (var complexProperty in typeBase.GetDeclaredComplexProperties())
             {
+                if (complexProperty.IsCollection)
+                {
+                    throw new InvalidOperationException(
+                        CosmosStrings.ComplexTypeCollectionsNotSupported(
+                            complexProperty.ComplexType.ShortName(),
+                            complexProperty.Name));
+                }
+
                 ValidateType(complexProperty.ComplexType, logger);
             }
         }

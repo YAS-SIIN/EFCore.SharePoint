@@ -1,15 +1,16 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace Microsoft.EntityFrameworkCore.ChangeTracking.Internal;
 
 public partial class InternalEntryBase
 {
-    private readonly struct OriginalValues(InternalEntryBase entry)
+    private struct OriginalValues(InternalEntryBase entry)
     {
-        private readonly ISnapshot _values = entry.StructuralType.OriginalValuesFactory(entry);
+        private ISnapshot _values = entry.StructuralType.OriginalValuesFactory(entry);
 
         public object? GetValue(IInternalEntry entry, IPropertyBase property)
             => property.GetOriginalValueIndex() is var index && index == -1
@@ -47,7 +48,7 @@ public partial class InternalEntryBase
             {
                 throw new InvalidOperationException(
                     CoreStrings.ValueCannotBeNull(
-                        property.Name, property.DeclaringType.DisplayName(), property.ClrType.DisplayName()));
+                        property.Name, property.DeclaringType.DisplayName(), property.ClrType.ShortDisplayName()));
             }
 
             _values[index] = SnapshotValue(property, value);
@@ -60,14 +61,8 @@ public partial class InternalEntryBase
                 return;
             }
 
-            foreach (var property in entry.StructuralType.GetFlattenedProperties())
-            {
-                var index = property.GetOriginalValueIndex();
-                if (index >= 0)
-                {
-                    entry[property] = SnapshotValue(property, _values[index]);
-                }
-            }
+            // This isn't efficient, but avoids duplicating the logic
+            new CurrentPropertyValues((InternalEntryBase)entry).SetValues(new OriginalPropertyValues((InternalEntryBase)entry));
         }
 
         public void AcceptChanges(IInternalEntry entry)
@@ -77,20 +72,23 @@ public partial class InternalEntryBase
                 return;
             }
 
-            foreach (var property in entry.StructuralType.GetFlattenedProperties())
-            {
-                var index = property.GetOriginalValueIndex();
-                if (index >= 0)
-                {
-                    _values[index] = SnapshotValue(property, entry[property]);
-                }
-            }
+            _values = entry.StructuralType.OriginalValuesFactory(entry);
         }
 
         private static object? SnapshotValue(IPropertyBase propertyBase, object? value)
-         => propertyBase is IProperty property
-           ? property.GetValueComparer().Snapshot(value)
-           : value;
+            => propertyBase switch
+            {
+                IProperty property => property.GetValueComparer().Snapshot(value),
+                IComplexProperty complexProperty when complexProperty.IsCollection
+                    => value is IList list
+                        ? SnapshotFactoryFactory.SnapshotComplexCollection(list, (IRuntimeComplexProperty)complexProperty)
+                        : value is null
+                            ? null
+                            : throw new InvalidOperationException(
+                                CoreStrings.ComplexPropertyValueNotList(
+                                    complexProperty.Name, complexProperty.ClrType, value.GetType().ShortDisplayName())),
+                _ => value
+            };
 
         public bool IsEmpty
             => _values == null;

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
@@ -20,6 +21,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
     private SidecarValues _storeGeneratedValues;
     private StateData _stateData;
     private readonly ISnapshot _shadowValues;
+    private readonly InternalComplexCollectionEntry[] _complexCollectionEntries;
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -50,6 +52,15 @@ public abstract partial class InternalEntryBase : IInternalEntry
         StructuralType = structuralType;
         _shadowValues = shadowValues;
         PropertyStateData = new StateData(structuralType.PropertyCount, structuralType.NavigationCount);
+        _complexCollectionEntries = new InternalComplexCollectionEntry[StructuralType.ComplexCollectionCount];
+
+        foreach (var complexCollection in StructuralType.GetFlattenedComplexProperties())
+        {
+            if (complexCollection.IsCollection)
+            {
+                _complexCollectionEntries[complexCollection.GetIndex()] = new InternalComplexCollectionEntry(this, complexCollection);
+            }
+        }
     }
 
     /// <summary>
@@ -96,7 +107,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public virtual IInternalEntry ContainingEntry => this;
+    public virtual InternalEntryBase ContainingEntry => this;
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -120,6 +131,18 @@ public abstract partial class InternalEntryBase : IInternalEntry
     }
 
     /// <summary>
+    ///     For complex element entries this returns an indices array that contains an index for each level of nested complex collection properties
+    ///     indicating the position of the current instance in the corresponding collection.
+    /// </summary>
+    /// <remarks>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </remarks>
+    public virtual IReadOnlyList<int> GetOrdinals() => [];
+
+    /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
     ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
@@ -140,9 +163,10 @@ public abstract partial class InternalEntryBase : IInternalEntry
         EntityState? forceStateWhenUnknownKey = null,
         EntityState? fallbackState = null)
     {
+        var oldState = _stateData.EntityState;
         PrepareForAdd(entityState);
 
-        SetEntityState(_stateData.EntityState, entityState, acceptChanges, modifyProperties);
+        SetEntityState(oldState, entityState, acceptChanges, modifyProperties);
     }
 
     /// <summary>
@@ -159,9 +183,10 @@ public abstract partial class InternalEntryBase : IInternalEntry
         EntityState? fallbackState = null,
         CancellationToken cancellationToken = default)
     {
+        var oldState = _stateData.EntityState;
         PrepareForAdd(entityState);
 
-        SetEntityState(_stateData.EntityState, entityState, acceptChanges, modifyProperties);
+        SetEntityState(oldState, entityState, acceptChanges, modifyProperties);
 
         return Task.CompletedTask;
     }
@@ -237,6 +262,14 @@ public abstract partial class InternalEntryBase : IInternalEntry
                     _stateData.FlagProperty(property.GetIndex(), PropertyFlag.Modified, isFlagged: false);
                 }
             }
+
+            foreach (var complexCollection in structuralType.GetFlattenedComplexProperties())
+            {
+                if (complexCollection.IsCollection)
+                {
+                    SetPropertyModified(complexCollection, isModified: true, recurse: true);
+                }
+            }
         }
 
         if (oldState == newState)
@@ -249,9 +282,17 @@ public abstract partial class InternalEntryBase : IInternalEntry
             _stateData.FlagAllProperties(
                 StructuralType.PropertyCount, PropertyFlag.Modified,
                 flagged: false);
+
+            foreach (var complexCollection in structuralType.GetFlattenedComplexProperties())
+            {
+                if (complexCollection.IsCollection)
+                {
+                    SetPropertyModified(complexCollection, isModified: false, recurse: true);
+                }
+            }
         }
 
-        _stateData.EntityState = oldState;
+        EntityState = oldState;
 
         OnStateChanging(newState);
 
@@ -261,21 +302,39 @@ public abstract partial class InternalEntryBase : IInternalEntry
             if (acceptChanges)
             {
                 _originalValues.AcceptChanges(this);
+
+                foreach (var complexCollection in _complexCollectionEntries)
+                {
+                    complexCollection.AcceptChanges();
+                }
             }
             else
             {
                 _originalValues.RejectChanges(this);
+
+                foreach (var complexCollection in _complexCollectionEntries)
+                {
+                    complexCollection.RejectChanges();
+                }
             }
         }
 
         SetServiceProperties(oldState, newState);
 
-        _stateData.EntityState = newState;
+        EntityState = newState;
 
         if (newState is EntityState.Deleted or EntityState.Detached
             && HasConceptualNull)
         {
             _stateData.FlagAllProperties(StructuralType.PropertyCount, PropertyFlag.Null, flagged: false);
+        }
+
+        foreach (var complexCollection in StructuralType.GetFlattenedComplexProperties())
+        {
+            if (complexCollection.IsCollection)
+            {
+                _complexCollectionEntries[complexCollection.GetIndex()].SetState(oldState, newState, acceptChanges, modifyProperties);
+            }
         }
 
         OnStateChanged(oldState);
@@ -300,6 +359,14 @@ public abstract partial class InternalEntryBase : IInternalEntry
     public virtual void MarkUnchangedFromQuery()
     {
         EntityState = EntityState.Unchanged;
+
+        foreach (var complexCollection in StructuralType.GetFlattenedComplexProperties())
+        {
+            if (complexCollection.IsCollection)
+            {
+                _complexCollectionEntries[complexCollection.GetIndex()].SetState(EntityState.Detached, EntityState.Unchanged, acceptChanges: false, modifyProperties: false);
+            }
+        }
     }
 
     /// <summary>
@@ -348,7 +415,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
     /// </summary>
     public bool IsUnknown(IProperty property)
     {
-        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.IsAssignableFrom(StructuralType),
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
             "Property " + property.Name + " not contained under " + StructuralType.Name);
 
         return _stateData.IsPropertyFlagged(property.GetIndex(), PropertyFlag.Unknown);
@@ -446,7 +513,8 @@ public abstract partial class InternalEntryBase : IInternalEntry
         else if (currentState == EntityState.Modified
                  && changeState
                  && !isModified
-                 && !_stateData.AnyPropertiesFlagged(PropertyFlag.Modified))
+                 && !_stateData.AnyPropertiesFlagged(PropertyFlag.Modified)
+                 && StructuralType.GetFlattenedComplexProperties().All(p => !p.IsCollection || !_complexCollectionEntries[p.GetIndex()].IsModified()))
         {
             OnStateChanging(EntityState.Unchanged);
             _stateData.EntityState = EntityState.Unchanged;
@@ -460,7 +528,56 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public void OnComplexPropertyModified(IComplexProperty property, bool isModified = true)
+    public bool IsModified(IComplexProperty property)
+    {
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+
+        return _complexCollectionEntries[property.GetIndex()].IsModified();
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public void SetPropertyModified(
+        IComplexProperty property,
+        bool isModified = true,
+        bool recurse = false)
+    {
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+
+        var index = property.GetIndex();
+        if (_complexCollectionEntries[index].IsModified() == isModified)
+        {
+            return;
+        }
+
+        _complexCollectionEntries[index].SetIsModified(isModified);
+
+        OnComplexPropertyModified(property, isModified);
+
+        if (recurse)
+        {
+            foreach (var complexEntry in GetFlattenedComplexEntries())
+            {
+                complexEntry.SetEntityState(isModified ? EntityState.Modified : EntityState.Unchanged, modifyProperties: true);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual void OnComplexPropertyModified(IComplexProperty property, bool isModified = true)
     {
         var currentState = _stateData.EntityState;
         if (currentState == EntityState.Deleted)
@@ -481,7 +598,8 @@ public abstract partial class InternalEntryBase : IInternalEntry
         }
         else if (currentState == EntityState.Modified
                  && !isModified
-                 && !_stateData.AnyPropertiesFlagged(PropertyFlag.Modified))
+                 && !_stateData.AnyPropertiesFlagged(PropertyFlag.Modified)
+                 && StructuralType.GetFlattenedComplexProperties().All(p => !p.IsCollection || !_complexCollectionEntries[p.GetIndex()].IsModified()))
         {
             OnStateChanging(EntityState.Unchanged);
             _stateData.EntityState = EntityState.Unchanged;
@@ -665,7 +783,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public T ReadOriginalValue<T>(IProperty property, int originalValueIndex)
+    public virtual T ReadOriginalValue<T>(IProperty property, int originalValueIndex)
         => _originalValues.GetValue<T>(this, property, originalValueIndex);
 
     [UnconditionalSuppressMessage(
@@ -737,14 +855,14 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public object? ReadPropertyValue(IPropertyBase propertyBase)
+    public virtual object? ReadPropertyValue(IPropertyBase propertyBase)
     {
         Check.DebugAssert(propertyBase.DeclaringType.IsAssignableFrom(StructuralType) || propertyBase.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
             "Property " + propertyBase.Name + " not contained under " + StructuralType.Name);
 
         return propertyBase.IsShadowProperty()
-                ? _shadowValues[propertyBase.GetShadowIndex()]
-                : propertyBase.GetGetter().GetClrValueUsingContainingEntity(EntityEntry.Entity);
+            ? _shadowValues[propertyBase.GetShadowIndex()]
+            : propertyBase.GetGetter().GetClrValueUsingContainingEntity(EntityEntry.Entity, GetOrdinals());
     }
 
     /// <summary>
@@ -761,6 +879,14 @@ public abstract partial class InternalEntryBase : IInternalEntry
         Check.DebugAssert(propertyBase.DeclaringType.IsAssignableFrom(StructuralType) || propertyBase.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
             "Property " + propertyBase.Name + " not contained under " + StructuralType.Name);
 
+        if (value == null
+            && !propertyBase.ClrType.IsNullableType())
+        {
+            throw new InvalidOperationException(
+                CoreStrings.ValueCannotBeNull(
+                    propertyBase.Name, propertyBase.DeclaringType.DisplayName(), propertyBase.ClrType.ShortDisplayName()));
+        }
+
         if (propertyBase.IsShadowProperty())
         {
             _shadowValues[propertyBase.GetShadowIndex()] = value;
@@ -772,7 +898,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
                 ? concretePropertyBase.MaterializationSetter
                 : concretePropertyBase.GetSetter();
 
-            setter.SetClrValueUsingContainingEntity(EntityEntry.Entity, value);
+            setter.SetClrValueUsingContainingEntity(EntityEntry.Entity, GetOrdinals(), value);
         }
     }
 
@@ -814,12 +940,12 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public object? GetOriginalValue(IPropertyBase propertyBase)
+    public virtual object? GetOriginalValue(IPropertyBase propertyBase)
     {
         Check.DebugAssert(propertyBase.DeclaringType.IsAssignableFrom(StructuralType) || propertyBase.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
             "Property " + propertyBase.Name + " not contained under " + StructuralType.Name);
 
-        return _originalValues.GetValue(this, (IProperty)propertyBase);
+        return _originalValues.GetValue(this, propertyBase);
     }
 
     /// <summary>
@@ -847,17 +973,87 @@ public abstract partial class InternalEntryBase : IInternalEntry
 
         EnsureOriginalValues();
 
-        var property = (IProperty)propertyBase;
-
-        _originalValues.SetValue(property, value, index);
-
-        // If setting the original value results in the current value being different from the
-        // original value, then mark the property as modified.
-        if ((EntityState == EntityState.Unchanged
-                || (EntityState == EntityState.Modified && !IsModified(property)))
-            && !_stateData.IsPropertyFlagged(property.GetIndex(), PropertyFlag.Unknown))
+        var complexProperty = propertyBase as IComplexProperty;
+        var isComplexCollection = complexProperty != null && complexProperty.IsCollection;
+        if (isComplexCollection)
         {
-            ((StateManager as StateManager)?.ChangeDetector as ChangeDetector)?.DetectValueChange(this, property);
+            ReorderOriginalComplexCollectionEntries(complexProperty!, (IList?)value);
+        }
+
+        _originalValues.SetValue(propertyBase, value, index);
+
+        if (propertyBase is IProperty property)
+        {
+            if ((EntityState == EntityState.Unchanged
+                    || (EntityState == EntityState.Modified && !IsModified(property)))
+                && !_stateData.IsPropertyFlagged(property.GetIndex(), PropertyFlag.Unknown))
+            {
+                ((StateManager as StateManager)?.ChangeDetector as ChangeDetector)?.DetectValueChange(this, property);
+            }
+        }
+        else if (isComplexCollection
+            && EntityState is EntityState.Unchanged or EntityState.Modified)
+        {
+            ((StateManager as StateManager)?.ChangeDetector as ChangeDetector)?.DetectComplexCollectionChanges(this, complexProperty!);
+        }
+    }
+
+    private void ReorderOriginalComplexCollectionEntries(IComplexProperty complexProperty, IList? newOriginalCollection)
+    {
+        Check.DebugAssert(HasOriginalValuesSnapshot, "This should only be called when original values are present");
+
+        var oldOriginalCollection = (IList?)GetOriginalValue(complexProperty);
+        if (oldOriginalCollection == null
+            || newOriginalCollection == null)
+        {
+            return;
+        }
+
+        _complexCollectionEntries[complexProperty.GetIndex()].EnsureCapacity(newOriginalCollection.Count, original: true, trim: false);
+
+        var originalEntries = GetComplexCollectionOriginalEntries(complexProperty);
+        var elementToOriginalEntry = new Dictionary<object, InternalComplexEntry>(ReferenceEqualityComparer.Instance);
+
+        // Build mapping of existing non-null elements to their entries
+        for (var i = 0; i < originalEntries.Count && i < oldOriginalCollection.Count; i++)
+        {
+            var originalEntry = originalEntries[i];
+            if (originalEntry != null)
+            {
+                var element = oldOriginalCollection[i];
+                if (element != null)
+                {
+                    elementToOriginalEntry[element] = originalEntry;
+                }
+            }
+        }
+
+        var newOrdinal = 0;
+        for (; newOrdinal < newOriginalCollection.Count; newOrdinal++)
+        {
+            var element = newOriginalCollection[newOrdinal];
+            if (element != null && elementToOriginalEntry.TryGetValue(element, out var originalEntry)
+                && originalEntry.OriginalOrdinal != newOrdinal)
+            {
+                if (originalEntry.EntityState is EntityState.Detached or EntityState.Added)
+                {
+                    originalEntry.OriginalOrdinal = newOrdinal;
+                }
+                else
+                {
+                    MoveComplexCollectionEntry(complexProperty, originalEntry.OriginalOrdinal, newOrdinal, original: true);
+                }
+            }
+        }
+
+        for (; newOrdinal < originalEntries.Count; newOrdinal++)
+        {
+            var entry = originalEntries[newOrdinal];
+            if (entry != null
+                && entry.EntityState is not EntityState.Detached)
+            {
+                entry.SetEntityState(EntityState.Detached);
+            }
         }
     }
 
@@ -911,6 +1107,139 @@ public abstract partial class InternalEntryBase : IInternalEntry
     /// </summary>
     public virtual bool HasOriginalValuesSnapshot
         => !_originalValues.IsEmpty;
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public InternalComplexEntry GetComplexCollectionEntry(IComplexProperty property, int ordinal)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        return _complexCollectionEntries[property.GetIndex()].GetEntry(ordinal);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public IReadOnlyList<InternalComplexEntry?> GetComplexCollectionEntries(IComplexProperty property)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        return _complexCollectionEntries[property.GetIndex()].GetOrCreateEntries(original: false)!;
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public InternalComplexEntry GetComplexCollectionOriginalEntry(IComplexProperty property, int ordinal)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        return _complexCollectionEntries[property.GetIndex()].GetEntry(ordinal, original: true);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public IReadOnlyList<InternalComplexEntry?> GetComplexCollectionOriginalEntries(IComplexProperty property)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        return _complexCollectionEntries[property.GetIndex()].GetOrCreateEntries(original: true)!;
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public IEnumerable<InternalComplexEntry> GetFlattenedComplexEntries()
+        => _complexCollectionEntries.SelectMany(c => c.GetOrCreateEntries(original: false)).Where(e => e != null)!;
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual void EnsureComplexCollectionEntriesCapacity(IComplexProperty property, int capacity, int originalCapacity, bool trim = true)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        var index = property.GetIndex();
+        _complexCollectionEntries[index].EnsureCapacity(capacity, original: false, trim);
+        _complexCollectionEntries[index].EnsureCapacity(originalCapacity, original: true, trim);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual void MoveComplexCollectionEntry(IComplexProperty property, int fromOrdinal, int toOrdinal, bool original = false)
+    {
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        _complexCollectionEntries[property.GetIndex()].MoveEntry(fromOrdinal, toOrdinal, original);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public void OnComplexElementStateChange(InternalComplexEntry entry, EntityState oldState, EntityState newState)
+    {
+        var property = entry.ComplexProperty;
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        _complexCollectionEntries[property.GetIndex()].HandleStateChange(entry, oldState, newState);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual int ValidateOrdinal(InternalComplexEntry entry, bool original)
+    {
+        var property = entry.ComplexProperty;
+        Check.DebugAssert(property.DeclaringType.IsAssignableFrom(StructuralType) || property.DeclaringType.ContainingType.IsAssignableFrom(StructuralType),
+            "Property " + property.Name + " not contained under " + StructuralType.Name);
+        Check.DebugAssert(property.IsCollection, $"Property {property.Name} should be a collection");
+
+        return _complexCollectionEntries[entry.ComplexProperty.GetIndex()].ValidateOrdinal(entry, original);
+    }
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -1101,7 +1430,16 @@ public abstract partial class InternalEntryBase : IInternalEntry
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
     protected virtual void OnPropertyChanged(IPropertyBase propertyBase, object? value, bool setModified)
-        => StateManager.InternalEntityEntryNotifier.PropertyChanged(this, propertyBase, setModified);
+    {
+        StateManager.InternalEntityEntryNotifier.PropertyChanged(this, propertyBase, setModified);
+
+        if (propertyBase is IComplexProperty { IsCollection: true } complexProperty
+            && StateManager is StateManager { ChangeDetector: ChangeDetector changeDetector })
+        {
+            // Trigger change detection for complex collections to ensure InternalComplexEntry states are updated
+            changeDetector.DetectComplexCollectionChanges(this, complexProperty);
+        }
+    }
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -1175,6 +1513,16 @@ public abstract partial class InternalEntryBase : IInternalEntry
         _stateData.FlagAllProperties(StructuralType.PropertyCount, PropertyFlag.Unknown, false);
 
         var currentState = EntityState;
+        if (currentState is EntityState.Added or EntityState.Modified)
+        {
+            _originalValues.AcceptChanges(this);
+
+            foreach (var complexCollection in _complexCollectionEntries)
+            {
+                complexCollection.AcceptChanges();
+            }
+        }
+
         switch (currentState)
         {
             case EntityState.Unchanged:
@@ -1182,9 +1530,7 @@ public abstract partial class InternalEntryBase : IInternalEntry
                 return;
             case EntityState.Added:
             case EntityState.Modified:
-                _originalValues.AcceptChanges(this);
-
-                SetEntityState(EntityState.Unchanged, true);
+                SetEntityState(EntityState.Unchanged, acceptChanges: true);
                 break;
             case EntityState.Deleted:
                 SetEntityState(EntityState.Detached);
@@ -1261,6 +1607,11 @@ public abstract partial class InternalEntryBase : IInternalEntry
             }
         }
 
+        foreach (var complexEntry in GetFlattenedComplexEntries())
+        {
+            complexEntry.PrepareToSave();
+        }
+
         DiscardStoreGeneratedValues();
 
         return this;
@@ -1278,7 +1629,9 @@ public abstract partial class InternalEntryBase : IInternalEntry
         {
             if (property.GetElementType() != null
                 && !property.IsNullable
-                && GetCurrentValue(property) == null)
+                && GetCurrentValue(property) == null
+                && (property.DeclaringType is not IComplexType complexType
+                    || GetCurrentValue(complexType.ComplexProperty) != null))
             {
                 throw new InvalidOperationException(
                     CoreStrings.NullRequiredPrimitiveCollection(structuralType.DisplayName(), property.Name));
@@ -1292,7 +1645,9 @@ public abstract partial class InternalEntryBase : IInternalEntry
                 if (!complexProperty.IsNullable
                     && !complexProperty.IsCollection
                     && this[complexProperty] == null
-                    && complexProperty.ComplexType.GetProperties().Any(p => !p.IsNullable))
+                    && complexProperty.ComplexType.GetProperties().Any(p => !p.IsNullable)
+                    && (complexProperty.DeclaringType is not IComplexType complexType
+                        || GetCurrentValue(complexType.ComplexProperty) != null))
                 {
                     throw new InvalidOperationException(
                         CoreStrings.NullRequiredComplexProperty(
@@ -1314,6 +1669,11 @@ public abstract partial class InternalEntryBase : IInternalEntry
         {
             _storeGeneratedValues = new SidecarValues();
             _stateData.FlagAllProperties(StructuralType.PropertyCount, PropertyFlag.IsStoreGenerated, false);
+        }
+
+        foreach (var complexEntry in GetFlattenedComplexEntries())
+        {
+            complexEntry.DiscardStoreGeneratedValues();
         }
     }
 
@@ -1391,6 +1751,8 @@ public abstract partial class InternalEntryBase : IInternalEntry
     /// </summary>
     public bool HasStoreGeneratedValue(IProperty property)
         => GetValueType(property) == CurrentValueType.StoreGenerated;
+
+    IInternalEntry IInternalEntry.ContainingEntry => ContainingEntry;
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to

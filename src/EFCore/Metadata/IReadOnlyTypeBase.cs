@@ -26,6 +26,12 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
         => (IReadOnlyEntityType)this;
 
     /// <summary>
+    ///     Gets this entity type or the closest collection property in the complex property chain.
+    /// </summary>
+    IReadOnlyTypeBase ContainingType
+        => this;
+
+    /// <summary>
     ///     Gets the base type of this type. Returns <see langword="null" /> if this is not a
     ///     derived type in an inheritance hierarchy.
     /// </summary>
@@ -182,7 +188,7 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
     ///     otherwise <see langword="false" />.
     /// </returns>
     bool IsStrictlyDerivedFrom(IReadOnlyTypeBase baseType)
-        => this != Check.NotNull(baseType, nameof(baseType)) && baseType.IsAssignableFrom(this);
+        => this != Check.NotNull(baseType) && baseType.IsAssignableFrom(this);
 
     /// <summary>
     ///     Gets all types in the model that derive from this type.
@@ -269,7 +275,7 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
     /// <param name="memberInfo">The member on the class.</param>
     /// <returns>The property, or <see langword="null" /> if none is found.</returns>
     IReadOnlyProperty? FindProperty(MemberInfo memberInfo)
-        => (Check.NotNull(memberInfo, nameof(memberInfo)) as PropertyInfo)?.IsIndexerProperty() == true
+        => (Check.NotNull(memberInfo) as PropertyInfo)?.IsIndexerProperty() == true
             ? null
             : FindProperty(memberInfo.GetSimpleMemberName());
 
@@ -301,7 +307,7 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
     /// <returns>The property.</returns>
     IReadOnlyProperty GetProperty(string name)
     {
-        Check.NotEmpty(name, nameof(name));
+        Check.NotEmpty(name);
 
         var property = FindProperty(name);
         return property == null
@@ -359,7 +365,7 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
     /// <param name="memberInfo">The member on the class.</param>
     /// <returns>The property, or <see langword="null" /> if none is found.</returns>
     IReadOnlyComplexProperty? FindComplexProperty(MemberInfo memberInfo)
-        => (Check.NotNull(memberInfo, nameof(memberInfo)) as PropertyInfo)?.IsIndexerProperty() == true
+        => (Check.NotNull(memberInfo) as PropertyInfo)?.IsIndexerProperty() == true
             ? null
             : FindComplexProperty(memberInfo.GetSimpleMemberName());
 
@@ -447,4 +453,22 @@ public interface IReadOnlyTypeBase : IReadOnlyAnnotatable
     /// </summary>
     /// <returns>The <see cref="PropertyInfo" /> for the indexer on the associated CLR type if one exists.</returns>
     PropertyInfo? FindIndexerPropertyInfo();
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    [EntityFrameworkInternal]
+    Func<MaterializationContext, object> GetOrCreateMaterializer(IStructuralTypeMaterializerSource source);
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    [EntityFrameworkInternal]
+    Func<MaterializationContext, object> GetOrCreateEmptyMaterializer(IStructuralTypeMaterializerSource source);
 }

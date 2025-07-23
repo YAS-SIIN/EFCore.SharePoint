@@ -350,21 +350,24 @@ public sealed partial class SelectExpression : TableExpressionBase
 
                             foreach (var complexProperty in complexType.GetComplexProperties())
                             {
-                                ProcessComplexType(
-                                    (StructuralTypeProjectionExpression)complexTypeProjection.BindComplexProperty(complexProperty)
-                                        .ValueBufferExpression);
+                                if (!complexProperty.IsCollection)
+                                {
+                                    var complexPropertyShaper = (StructuralTypeShaperExpression)complexTypeProjection.BindComplexProperty(complexProperty);
+
+                                    ProcessComplexType((StructuralTypeProjectionExpression)complexPropertyShaper.ValueBufferExpression);
+                                }
                             }
                         }
 
                         break;
 
-                    case JsonQueryExpression jsonQueryExpression:
+                    case JsonQueryExpression { StructuralType: IEntityType entityType } jsonQueryExpression:
                         if (jsonQueryExpression.IsCollection)
                         {
                             throw new InvalidOperationException(RelationalStrings.DistinctOnCollectionNotSupported);
                         }
 
-                        var primaryKeyProperties = jsonQueryExpression.EntityType.FindPrimaryKey()!.Properties;
+                        var primaryKeyProperties = entityType.FindPrimaryKey()!.Properties;
                         var primaryKeyPropertiesCount = jsonQueryExpression.IsCollection
                             ? primaryKeyProperties.Count - 1
                             : primaryKeyProperties.Count;
@@ -377,6 +380,9 @@ public sealed partial class SelectExpression : TableExpressionBase
                         }
 
                         break;
+
+                    case JsonQueryExpression { StructuralType: IComplexType complexType } jsonQueryExpression:
+                        throw new NotImplementedException(); // #36296
 
                     case SqlExpression sqlExpression:
                         otherExpressions.Add(sqlExpression);
@@ -485,8 +491,14 @@ public sealed partial class SelectExpression : TableExpressionBase
 
                 foreach (var complexProperty in GetAllComplexPropertiesInHierarchy(projection.StructuralType))
                 {
-                    ProcessTypeProjection(
-                        (StructuralTypeProjectionExpression)projection.BindComplexProperty(complexProperty).ValueBufferExpression);
+                    if (complexProperty.IsCollection)
+                    {
+                        throw new NotImplementedException(); // #36296
+                    }
+
+                    var propertyShaper = (StructuralTypeShaperExpression)projection.BindComplexProperty(complexProperty);
+
+                    ProcessTypeProjection((StructuralTypeProjectionExpression)propertyShaper.ValueBufferExpression);
                 }
             }
 
@@ -925,8 +937,8 @@ public sealed partial class SelectExpression : TableExpressionBase
                             var actualParentIdentifier = _identifier.Take(outerSelectExpression._identifier.Count).ToList();
                             for (var j = 0; j < actualParentIdentifier.Count; j++)
                             {
-                                AppendOrdering(new OrderingExpression(actualParentIdentifier[j].Column, ascending: true));
-                                outerSelectExpression.AppendOrdering(
+                                AppendOrderingInternal(new OrderingExpression(actualParentIdentifier[j].Column, ascending: true));
+                                outerSelectExpression.AppendOrderingInternal(
                                     new OrderingExpression(outerSelectExpression._identifier[j].Column, ascending: true));
                             }
 
@@ -1232,64 +1244,73 @@ public sealed partial class SelectExpression : TableExpressionBase
                 {
                     var constantValue = ((ConstantExpression)innerSelectExpression._clientProjections[j]).Value!;
                     ConstantExpression remappedConstant;
-                    if (constantValue is Dictionary<IProperty, int> entityDictionary)
+                    switch (((ConstantExpression)innerSelectExpression._clientProjections[j]).Value!)
                     {
-                        var newDictionary = new Dictionary<IProperty, int>(entityDictionary.Count);
-                        foreach (var (property, value) in entityDictionary)
+                        case Dictionary<IPropertyBase, int> entityDictionary:
                         {
-                            newDictionary[property] = projectionIndexMap[value];
+                            var newDictionary = new Dictionary<IPropertyBase, int>(entityDictionary.Count);
+                            foreach (var (property, value) in entityDictionary)
+                            {
+                                newDictionary[property] = projectionIndexMap[value];
+                            }
+
+                            remappedConstant = Constant(newDictionary);
+                            break;
                         }
 
-                        remappedConstant = Constant(newDictionary);
-                    }
-                    else if (constantValue is JsonProjectionInfo jsonProjectionInfo)
-                    {
-                        var newKeyAccessInfo = new List<(IProperty?, int?, int?)>();
-                        foreach (var (keyProperty, constantKeyValue, keyProjectionIndex) in jsonProjectionInfo.KeyAccessInfo)
-                        {
-                            newKeyAccessInfo.Add(
-                                (keyProperty, constantKeyValue,
-                                    keyProjectionIndex != null ? projectionIndexMap[keyProjectionIndex.Value] : null));
-                        }
-
-                        remappedConstant = Constant(
-                            new JsonProjectionInfo(
-                                projectionIndexMap[jsonProjectionInfo.JsonColumnIndex],
-                                newKeyAccessInfo));
-                    }
-                    else if (constantValue is QueryableJsonProjectionInfo queryableJsonProjectionInfo)
-                    {
-                        var newPropertyIndexMap = new Dictionary<IProperty, int>(queryableJsonProjectionInfo.PropertyIndexMap.Count);
-                        foreach (var (property, value) in queryableJsonProjectionInfo.PropertyIndexMap)
-                        {
-                            newPropertyIndexMap[property] = projectionIndexMap[value];
-                        }
-
-                        var newChildrenProjectionInfo = new List<(JsonProjectionInfo, INavigation)>();
-                        foreach (var childProjectionInfo in queryableJsonProjectionInfo.ChildrenProjectionInfo)
+                        case JsonProjectionInfo jsonProjectionInfo:
                         {
                             var newKeyAccessInfo = new List<(IProperty?, int?, int?)>();
-                            foreach (var (keyProperty, constantKeyValue, keyProjectionIndex) in childProjectionInfo.JsonProjectionInfo
-                                         .KeyAccessInfo)
+                            foreach (var (keyProperty, constantKeyValue, keyProjectionIndex) in jsonProjectionInfo.KeyAccessInfo)
                             {
                                 newKeyAccessInfo.Add(
                                     (keyProperty, constantKeyValue,
                                         keyProjectionIndex != null ? projectionIndexMap[keyProjectionIndex.Value] : null));
                             }
 
-                            newChildrenProjectionInfo.Add(
-                                (new JsonProjectionInfo(
-                                        projectionIndexMap[childProjectionInfo.JsonProjectionInfo.JsonColumnIndex],
-                                        newKeyAccessInfo),
-                                    childProjectionInfo.Navigation));
+                            remappedConstant = Constant(
+                                new JsonProjectionInfo(
+                                    projectionIndexMap[jsonProjectionInfo.JsonColumnIndex],
+                                    newKeyAccessInfo));
+                            break;
                         }
 
-                        remappedConstant = Constant(
-                            new QueryableJsonProjectionInfo(newPropertyIndexMap, newChildrenProjectionInfo));
-                    }
-                    else
-                    {
-                        remappedConstant = Constant(projectionIndexMap[(int)constantValue]);
+                        case QueryableJsonProjectionInfo queryableJsonProjectionInfo:
+                        {
+                            var newPropertyIndexMap = new Dictionary<IPropertyBase, int>(queryableJsonProjectionInfo.PropertyIndexMap.Count);
+                            foreach (var (property, value) in queryableJsonProjectionInfo.PropertyIndexMap)
+                            {
+                                newPropertyIndexMap[property] = projectionIndexMap[value];
+                            }
+
+                            var newChildrenProjectionInfo = new List<(JsonProjectionInfo, INavigation)>();
+                            foreach (var childProjectionInfo in queryableJsonProjectionInfo.ChildrenProjectionInfo)
+                            {
+                                var newKeyAccessInfo = new List<(IProperty?, int?, int?)>();
+                                foreach (var (keyProperty, constantKeyValue, keyProjectionIndex) in childProjectionInfo.JsonProjectionInfo
+                                            .KeyAccessInfo)
+                                {
+                                    newKeyAccessInfo.Add(
+                                        (keyProperty, constantKeyValue,
+                                            keyProjectionIndex != null ? projectionIndexMap[keyProjectionIndex.Value] : null));
+                                }
+
+                                newChildrenProjectionInfo.Add(
+                                    (new JsonProjectionInfo(
+                                            projectionIndexMap[childProjectionInfo.JsonProjectionInfo.JsonColumnIndex],
+                                            newKeyAccessInfo),
+                                        childProjectionInfo.Navigation));
+                            }
+
+                            remappedConstant = Constant(
+                                new QueryableJsonProjectionInfo(newPropertyIndexMap, newChildrenProjectionInfo));
+
+                            break;
+                        }
+
+                        default:
+                            remappedConstant = Constant(projectionIndexMap[(int)constantValue]);
+                            break;
                     }
 
                     newClientProjections.Add(remappedConstant);
@@ -1313,9 +1334,10 @@ public sealed partial class SelectExpression : TableExpressionBase
             {
                 result[projectionMember] = expression switch
                 {
-                    StructuralTypeProjectionExpression projection => AddStructuralTypeProjection(projection),
-                    JsonQueryExpression jsonQueryExpression => AddJsonProjection(jsonQueryExpression),
-                    _ => Constant(AddToProjection((SqlExpression)expression, projectionMember.Last?.Name))
+                    StructuralTypeProjectionExpression p => AddStructuralTypeProjection(p),
+                    JsonQueryExpression p => AddJsonProjection(p),
+                    SqlExpression p => Constant(AddToProjection(p, projectionMember.Last?.Name)),
+                    _ => throw new UnreachableException()
                 };
             }
 
@@ -1340,7 +1362,7 @@ public sealed partial class SelectExpression : TableExpressionBase
             if (projection is { StructuralType: IEntityType entityType }
                 && entityType.IsMappedToJson())
             {
-                var propertyIndexMap = new Dictionary<IProperty, int>();
+                var propertyIndexMap = new Dictionary<IPropertyBase, int>();
                 var ownerEntity = entityType;
 
                 do
@@ -1374,7 +1396,7 @@ public sealed partial class SelectExpression : TableExpressionBase
                 return Constant(new QueryableJsonProjectionInfo(propertyIndexMap, childrenProjectionInfo));
             }
 
-            var projections = new Dictionary<IProperty, int>();
+            var projections = new Dictionary<IPropertyBase, int>();
 
             ProcessType(projection);
 
@@ -1394,8 +1416,25 @@ public sealed partial class SelectExpression : TableExpressionBase
 
                 foreach (var complexProperty in GetAllComplexPropertiesInHierarchy(typeProjection.StructuralType))
                 {
-                    ProcessType(
-                        (StructuralTypeProjectionExpression)typeProjection.BindComplexProperty(complexProperty).ValueBufferExpression);
+                    switch (typeProjection.BindComplexProperty(complexProperty))
+                    {
+                        case StructuralTypeShaperExpression { ValueBufferExpression: StructuralTypeProjectionExpression nestedProjection }:
+                            ProcessType(nestedProjection);
+                            break;
+
+                        // Complex (not owned) JSON, single (non-collection)
+                        case StructuralTypeShaperExpression { ValueBufferExpression: JsonQueryExpression jsonQuery }:
+                            projections[complexProperty] = ((JsonProjectionInfo)AddJsonProjection(jsonQuery).Value!).JsonColumnIndex;
+                            break;
+
+                        // Complex (not owned) JSON, collection
+                        case CollectionResultExpression { QueryExpression: JsonQueryExpression jsonQuery }:
+                            projections[complexProperty] = ((JsonProjectionInfo)AddJsonProjection(jsonQuery).Value!).JsonColumnIndex;
+                            break;
+
+                        default:
+                            throw new UnreachableException();
+                    }
                 }
             }
 
@@ -1419,29 +1458,39 @@ public sealed partial class SelectExpression : TableExpressionBase
             _projection.Add(new ProjectionExpression(jsonScalarExpression, ""));
             var jsonColumnIndex = _projection.Count - 1;
             var keyAccessInfo = new List<(IProperty?, int?, int?)>();
-            var keyProperties = GetMappedKeyProperties(jsonQueryExpression.EntityType.FindPrimaryKey()!);
-            foreach (var keyProperty in keyProperties)
+
+            switch (jsonQueryExpression.StructuralType)
             {
-                var keyColumn = jsonQueryExpression.BindProperty(keyProperty);
-                keyAccessInfo.Add((keyProperty, null, AddToProjection(keyColumn)));
+                case IEntityType entityType:
+                    var keyProperties = GetMappedKeyProperties(entityType.FindPrimaryKey()!);
+                    foreach (var keyProperty in keyProperties)
+                    {
+                        var keyColumn = jsonQueryExpression.BindProperty(keyProperty);
+                        keyAccessInfo.Add((keyProperty, null, AddToProjection(keyColumn)));
+                    }
+
+                    foreach (var elementAccessSegment in jsonScalarExpression.Path.Where(x => x.ArrayIndex != null))
+                    {
+                        if (elementAccessSegment.ArrayIndex is SqlConstantExpression { Value: int intValue })
+                        {
+                            keyAccessInfo.Add((null, intValue, null));
+                        }
+                        else
+                        {
+                            keyAccessInfo.Add((null, null, AddToProjection(elementAccessSegment.ArrayIndex!)));
+                        }
+                    }
+                    break;
+
+                case IComplexType complexType:
+                    break;
+
+                default:
+                    throw new UnreachableException();
             }
 
-            foreach (var elementAccessSegment in jsonScalarExpression.Path.Where(x => x.ArrayIndex != null))
-            {
-                if (elementAccessSegment.ArrayIndex is SqlConstantExpression { Value: int intValue })
-                {
-                    keyAccessInfo.Add((null, intValue, null));
-                }
-                else
-                {
-                    keyAccessInfo.Add((null, null, AddToProjection(elementAccessSegment.ArrayIndex!)));
-                }
-            }
 
-            return Constant(
-                new JsonProjectionInfo(
-                    jsonColumnIndex,
-                    keyAccessInfo));
+            return Constant(new JsonProjectionInfo(jsonColumnIndex, keyAccessInfo));
         }
 
         static IReadOnlyList<IProperty> GetMappedKeyProperties(IKey key)
@@ -1865,6 +1914,11 @@ public sealed partial class SelectExpression : TableExpressionBase
     /// <param name="orderingExpression">An ordering expression to use for ordering.</param>
     public void ApplyOrdering(OrderingExpression orderingExpression)
     {
+        if (Limit is SqlConstantExpression { Value: 1 })
+        {
+            return;
+        }
+
         if (IsDistinct
             || Limit != null
             || Offset != null)
@@ -1882,14 +1936,21 @@ public sealed partial class SelectExpression : TableExpressionBase
     /// <param name="orderingExpression">An ordering expression to use for ordering.</param>
     public void AppendOrdering(OrderingExpression orderingExpression)
     {
-        if (!_orderings.Any(o => o.Expression.Equals(orderingExpression.Expression)))
+        if (Limit is SqlConstantExpression { Value: 1 })
         {
-            AppendOrderingInternal(orderingExpression);
+            return;
         }
+
+        AppendOrderingInternal(orderingExpression);
     }
 
     private void AppendOrderingInternal(OrderingExpression orderingExpression)
-        => _orderings.Add(orderingExpression.Update(orderingExpression.Expression));
+    {
+        if (!_orderings.Any(o => o.Expression.Equals(orderingExpression.Expression)))
+        {
+            _orderings.Add(orderingExpression);
+        }
+    }
 
     /// <summary>
     ///     Reverses the existing orderings on the <see cref="SelectExpression" />.
@@ -2210,7 +2271,7 @@ public sealed partial class SelectExpression : TableExpressionBase
                 StructuralTypeProjectionExpression structuralProjection2)
             {
                 var propertyExpressions = new Dictionary<IProperty, ColumnExpression>();
-                var complexPropertyCache = new Dictionary<IComplexProperty, StructuralTypeShaperExpression>();
+                var complexPropertyCache = new Dictionary<IComplexProperty, Expression>();
                 var type = structuralProjection1.StructuralType;
 
                 foreach (var property in type.GetPropertiesInHierarchy())
@@ -2272,9 +2333,15 @@ public sealed partial class SelectExpression : TableExpressionBase
                     var complexPropertyShaper1 = structuralProjection1.BindComplexProperty(complexProperty);
                     var complexPropertyShaper2 = structuralProjection2.BindComplexProperty(complexProperty);
 
+                    if (complexPropertyShaper1 is not StructuralTypeShaperExpression nonCollectionShaper1
+                        || complexPropertyShaper2 is not StructuralTypeShaperExpression nonCollectionShaper2)
+                    {
+                        throw new NotImplementedException("Set operation over collection complex properties");
+                    }
+
                     var resultComplexProjection = ProcessStructuralType(
-                        (StructuralTypeProjectionExpression)complexPropertyShaper1.ValueBufferExpression,
-                        (StructuralTypeProjectionExpression)complexPropertyShaper2.ValueBufferExpression);
+                        (StructuralTypeProjectionExpression)nonCollectionShaper1.ValueBufferExpression,
+                        (StructuralTypeProjectionExpression)nonCollectionShaper2.ValueBufferExpression);
 
                     var resultComplexShaper = new RelationalStructuralTypeShaperExpression(
                         complexProperty.ComplexType,
@@ -2378,20 +2445,25 @@ public sealed partial class SelectExpression : TableExpressionBase
         _tables.Add(dummySelectExpression);
         _tables.Add(joinTable);
 
+        // Go over all projected columns and make them nullable; for non-nullable value types, add a SQL COALESCE as well.
         var projectionMapping = new Dictionary<ProjectionMember, Expression>();
-        foreach (var projection in _projectionMapping)
+        foreach (var (projectionMember, projection) in _projectionMapping)
         {
-            var projectionToAdd = projection.Value;
-            if (projectionToAdd is StructuralTypeProjectionExpression typeProjection)
+            var newProjection = projection switch
             {
-                projectionToAdd = typeProjection.MakeNullable();
-            }
-            else if (projectionToAdd is ColumnExpression column)
+                StructuralTypeProjectionExpression p => p.MakeNullable(),
+                ColumnExpression column => column.MakeNullable(),
+                var p => p
+            };
+
+            if (newProjection is SqlExpression { Type: var type } newSqlProjection && !type.IsNullableType())
             {
-                projectionToAdd = column.MakeNullable();
+                newProjection = sqlExpressionFactory.Coalesce(
+                    newSqlProjection,
+                    sqlExpressionFactory.Constant(type.GetDefaultValue(), type));
             }
 
-            projectionMapping[projection.Key] = projectionToAdd;
+            projectionMapping[projectionMember] = newProjection;
         }
 
         // ChildIdentifiers shouldn't be required to be updated since during translation they should be empty.
@@ -2688,18 +2760,20 @@ public sealed partial class SelectExpression : TableExpressionBase
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
     [EntityFrameworkInternal]
-    public static StructuralTypeShaperExpression GenerateComplexPropertyShaperExpression(
+    public static Expression GenerateComplexPropertyShaperExpression(
         StructuralTypeProjectionExpression containerProjection,
         IComplexProperty complexProperty)
     {
+        var complexType = complexProperty.ComplexType;
         var propertyExpressionMap = new Dictionary<IProperty, ColumnExpression>();
 
         // We do not support complex type splitting, so we will only ever have a single table/view mapping to it.
         // See Issue #32853 and Issue #31248
-        var complexTypeTable = complexProperty.ComplexType.GetViewOrTableMappings().Single().Table;
+        var complexTypeTable = complexType.GetViewOrTableMappings().Single().Table;
+
         if (!containerProjection.TableMap.TryGetValue(complexTypeTable, out var tableAlias))
         {
-            complexTypeTable = complexProperty.ComplexType.GetDefaultMappings().Single().Table;
+            complexTypeTable = complexType.GetDefaultMappings().Single().Table;
             tableAlias = containerProjection.TableMap[complexTypeTable];
         }
 
@@ -2714,7 +2788,47 @@ public sealed partial class SelectExpression : TableExpressionBase
             isComplexTypeNullable = true;
         }
 
-        foreach (var property in complexProperty.ComplexType.GetProperties())
+        // The target type is a JSON complex type - generate a JsonQueryExpression.
+        if (complexType.IsMappedToJson())
+        {
+            var containerColumnName = complexType.GetContainerColumnName();
+            Check.DebugAssert(containerColumnName is not null, "Complex JSON type without a container column");
+            var containerColumn = complexTypeTable.FindColumn(containerColumnName);
+            Check.DebugAssert(containerColumn is not null, "Complex JSON container table not found on relational table");
+
+            // If the source type is a JSON complex type; since we're binding over StructuralTypeProjectionExpression - which represents a relational
+            // table-like thing - this means that an internal JSON collection has been converted to a relational table (e.g. OPENJSON on SQL Server)
+            // and we're now binding over that table.
+            // Otherwise, if the source type isn't mapped to JSON, we're just binding to an actual JSON column in a relational table, and not within it.
+            var containerColumnExpression = complexProperty.DeclaringType.IsMappedToJson()
+                ? new ColumnExpression(
+                    complexType.GetJsonPropertyName() ?? throw new UnreachableException($"No JSON property name for complex property {complexProperty.Name}"),
+                    tableAlias,
+                    complexProperty.ClrType,
+                    typeMapping: containerColumn.StoreTypeMapping,
+                    isComplexTypeNullable)
+                : new ColumnExpression(
+                    containerColumn.Name,
+                    tableAlias,
+                    containerColumn,
+                    complexProperty.ClrType,
+                    containerColumn.StoreTypeMapping,
+                    isComplexTypeNullable);
+
+            var jsonQuery = new JsonQueryExpression(
+                complexType,
+                containerColumnExpression,
+                keyPropertyMap: null,
+                complexProperty.ClrType,
+                complexProperty.IsCollection);
+
+            return complexProperty.IsCollection
+                ? new CollectionResultExpression(jsonQuery, complexProperty, elementType: complexType.ClrType)
+                : new RelationalStructuralTypeShaperExpression(complexType, jsonQuery, isComplexTypeNullable);
+        }
+
+        // Table splitting
+        foreach (var property in complexType.GetProperties())
         {
             // TODO: Reimplement EntityProjectionExpression via TableMap, and then use that here
             var column = complexTypeTable.FindColumn(property)!;
@@ -2730,12 +2844,10 @@ public sealed partial class SelectExpression : TableExpressionBase
 
         Check.DebugAssert(newTableMap.Single().Key == complexTypeTable, "Bad new table map");
 
-        var entityShaper = new RelationalStructuralTypeShaperExpression(
-            complexProperty.ComplexType,
+        return new RelationalStructuralTypeShaperExpression(
+            complexType,
             new StructuralTypeProjectionExpression(complexProperty.ComplexType, propertyExpressionMap, newTableMap, isComplexTypeNullable),
             isComplexTypeNullable);
-
-        return entityShaper;
     }
 
     /// <summary>
@@ -3576,7 +3688,7 @@ public sealed partial class SelectExpression : TableExpressionBase
 
                 if (item is StructuralTypeProjectionExpression projection)
                 {
-                    _clientProjections[i] = LiftEntityProjectionFromSubquery(projection, subqueryAlias);
+                    _clientProjections[i] = LiftStructuralProjectionFromSubquery(projection, subqueryAlias);
                 }
                 else if (item is JsonQueryExpression jsonQueryExpression)
                 {
@@ -3609,7 +3721,7 @@ public sealed partial class SelectExpression : TableExpressionBase
                 switch (expression)
                 {
                     case StructuralTypeProjectionExpression projection:
-                        _projectionMapping[projectionMember] = LiftEntityProjectionFromSubquery(projection, subqueryAlias);
+                        _projectionMapping[projectionMember] = LiftStructuralProjectionFromSubquery(projection, subqueryAlias);
                         break;
 
                     case JsonQueryExpression jsonQueryExpression:
@@ -3709,12 +3821,12 @@ public sealed partial class SelectExpression : TableExpressionBase
 
         return sqlRemappingVisitor;
 
-        StructuralTypeProjectionExpression LiftEntityProjectionFromSubquery(
+        StructuralTypeProjectionExpression LiftStructuralProjectionFromSubquery(
             StructuralTypeProjectionExpression projection,
             string subqueryAlias)
         {
             var propertyExpressions = new Dictionary<IProperty, ColumnExpression>();
-            var complexPropertyCache = new Dictionary<IComplexProperty, StructuralTypeShaperExpression>();
+            var complexPropertyCache = new Dictionary<IComplexProperty, Expression>();
 
             foreach (var property in projection.StructuralType.GetPropertiesInHierarchy())
             {
@@ -3736,9 +3848,14 @@ public sealed partial class SelectExpression : TableExpressionBase
 
             foreach (var complexProperty in GetAllComplexPropertiesInHierarchy(projection.StructuralType))
             {
-                var complexPropertyShaper = projection.BindComplexProperty(complexProperty);
+                if (complexProperty.IsCollection)
+                {
+                    throw new NotImplementedException("#36296");
+                }
 
-                var complexTypeProjectionExpression = LiftEntityProjectionFromSubquery(
+                var complexPropertyShaper = (StructuralTypeShaperExpression)projection.BindComplexProperty(complexProperty);
+
+                var complexTypeProjectionExpression = LiftStructuralProjectionFromSubquery(
                     (StructuralTypeProjectionExpression)complexPropertyShaper.ValueBufferExpression,
                     subqueryAlias);
 
@@ -3770,7 +3887,7 @@ public sealed partial class SelectExpression : TableExpressionBase
                     {
                         var newValueBufferExpression =
                             boundEntityShaperExpression.ValueBufferExpression is StructuralTypeProjectionExpression innerEntityProjection
-                                ? (Expression)LiftEntityProjectionFromSubquery(innerEntityProjection, subqueryAlias)
+                                ? (Expression)LiftStructuralProjectionFromSubquery(innerEntityProjection, subqueryAlias)
                                 : LiftJsonQueryFromSubquery((JsonQueryExpression)boundEntityShaperExpression.ValueBufferExpression);
 
                         boundEntityShaperExpression = boundEntityShaperExpression.Update(newValueBufferExpression);
@@ -3793,20 +3910,25 @@ public sealed partial class SelectExpression : TableExpressionBase
 
             var newJsonColumn = subquery.GenerateOuterColumn(subqueryAlias, jsonScalarExpression);
 
-            var newKeyPropertyMap = new Dictionary<IProperty, ColumnExpression>();
-            var keyProperties = jsonQueryExpression.KeyPropertyMap.Keys.ToList();
-            for (var i = 0; i < keyProperties.Count; i++)
+            Dictionary<IProperty, ColumnExpression>? newKeyPropertyMap = null;
+
+            if (jsonQueryExpression.KeyPropertyMap is not null)
             {
-                var keyProperty = keyProperties[i];
-                var innerColumn = jsonQueryExpression.BindProperty(keyProperty);
-                var outerColumn = subquery.GenerateOuterColumn(subqueryAlias, innerColumn);
-                projectionMap[innerColumn] = outerColumn;
-                newKeyPropertyMap[keyProperty] = outerColumn;
+                newKeyPropertyMap = new Dictionary<IProperty, ColumnExpression>();
+                var keyProperties = jsonQueryExpression.KeyPropertyMap.Keys.ToList();
+                for (var i = 0; i < keyProperties.Count; i++)
+                {
+                    var keyProperty = keyProperties[i];
+                    var innerColumn = jsonQueryExpression.BindProperty(keyProperty);
+                    var outerColumn = subquery.GenerateOuterColumn(subqueryAlias, innerColumn);
+                    projectionMap[innerColumn] = outerColumn;
+                    newKeyPropertyMap[keyProperty] = outerColumn;
+                }
             }
 
             // clear up the json path - we start from empty path after pushdown
             return new JsonQueryExpression(
-                jsonQueryExpression.EntityType,
+                jsonQueryExpression.StructuralType,
                 newJsonColumn,
                 newKeyPropertyMap,
                 jsonQueryExpression.Type,
@@ -3831,7 +3953,7 @@ public sealed partial class SelectExpression : TableExpressionBase
                 pe => pe.Expression is ColumnExpression column
                     && string.Equals(fromSql.Alias, column.TableAlias, StringComparison.OrdinalIgnoreCase))
             && _projectionMapping.TryGetValue(new ProjectionMember(), out var mapping)
-            && mapping.Type == (fromSql.Table == null ? typeof(int) : typeof(Dictionary<IProperty, int>));
+            && mapping.Type == (fromSql.Table == null ? typeof(int) : typeof(Dictionary<IPropertyBase, int>));
 
     /// <summary>
     ///     Prepares the <see cref="SelectExpression" /> to apply aggregate operation over it.
@@ -4033,6 +4155,7 @@ public sealed partial class SelectExpression : TableExpressionBase
         => new(
             column.Name,
             tableAlias,
+            column,
             property.ClrType.UnwrapNullableType(),
             column.PropertyMappings.First(m => m.Property == property).TypeMapping,
             nullable || column.IsNullable);
@@ -4041,12 +4164,13 @@ public sealed partial class SelectExpression : TableExpressionBase
         => new(
             subqueryProjection.Alias,
             tableAlias,
+            column: subqueryProjection.Expression is ColumnExpression { Column: IColumnBase column } ? column : null,
             subqueryProjection.Type,
             subqueryProjection.Expression.TypeMapping!,
             subqueryProjection.Expression switch
             {
-                ColumnExpression columnExpression => columnExpression.IsNullable,
-                SqlConstantExpression sqlConstantExpression => sqlConstantExpression.Value == null,
+                ColumnExpression c => c.IsNullable,
+                SqlConstantExpression c => c.Value is null,
                 _ => true
             });
 

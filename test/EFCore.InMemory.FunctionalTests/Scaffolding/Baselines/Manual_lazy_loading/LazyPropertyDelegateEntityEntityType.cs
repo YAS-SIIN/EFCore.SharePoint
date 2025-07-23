@@ -41,19 +41,25 @@ namespace TestNamespace
                 afterSaveBehavior: PropertySaveBehavior.Throw,
                 sentinel: 0);
             id.SetGetter(
-                int (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.Id(entity),
-                bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.Id(entity) == 0,
                 int (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.Id(instance),
                 bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.Id(instance) == 0);
             id.SetSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, int value) => LazyPropertyDelegateEntityUnsafeAccessors.Id(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, int value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.Id(instance) = value;
+                    return instance;
+                });
             id.SetMaterializationSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, int value) => LazyPropertyDelegateEntityUnsafeAccessors.Id(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, int value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.Id(instance) = value;
+                    return instance;
+                });
             id.SetAccessors(
-                int (IInternalEntry entry) => (entry.FlaggedAsStoreGenerated(0) ? entry.ReadStoreGeneratedValue<int>(0) : (entry.FlaggedAsTemporary(0) && LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))) == 0 ? entry.ReadTemporaryValue<int>(0) : LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))))),
-                int (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))),
+                int (IInternalEntry entry) => (entry.FlaggedAsStoreGenerated(0) ? entry.ReadStoreGeneratedValue<int>(0) : (entry.FlaggedAsTemporary(0) && LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))) == 0 ? entry.ReadTemporaryValue<int>(0) : LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))))),
+                int (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.Id(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))),
                 int (IInternalEntry entry) => entry.ReadOriginalValue<int>(id, 0),
-                int (IInternalEntry entry) => entry.ReadRelationshipSnapshotValue<int>(id, 0));
+                int (IInternalEntry entry) => ((InternalEntityEntry)(entry)).ReadRelationshipSnapshotValue<int>(id, 0));
             id.SetPropertyIndexes(
                 index: 0,
                 originalValueIndex: 0,
@@ -84,19 +90,25 @@ namespace TestNamespace
                 fieldInfo: typeof(CompiledModelInMemoryTest.LazyPropertyDelegateEntity).GetField("<LazyConstructorEntityId>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly),
                 sentinel: 0);
             lazyConstructorEntityId.SetGetter(
-                int (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(entity),
-                bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(entity) == 0,
                 int (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(instance),
                 bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(instance) == 0);
             lazyConstructorEntityId.SetSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, int value) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, int value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(instance) = value;
+                    return instance;
+                });
             lazyConstructorEntityId.SetMaterializationSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, int value) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, int value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(instance) = value;
+                    return instance;
+                });
             lazyConstructorEntityId.SetAccessors(
-                int (IInternalEntry entry) => (entry.FlaggedAsStoreGenerated(1) ? entry.ReadStoreGeneratedValue<int>(1) : (entry.FlaggedAsTemporary(1) && LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))) == 0 ? entry.ReadTemporaryValue<int>(1) : LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))))),
-                int (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))),
+                int (IInternalEntry entry) => (entry.FlaggedAsStoreGenerated(1) ? entry.ReadStoreGeneratedValue<int>(1) : (entry.FlaggedAsTemporary(1) && LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))) == 0 ? entry.ReadTemporaryValue<int>(1) : LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))))),
+                int (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntityId(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))),
                 int (IInternalEntry entry) => entry.ReadOriginalValue<int>(lazyConstructorEntityId, 1),
-                int (IInternalEntry entry) => entry.ReadRelationshipSnapshotValue<int>(lazyConstructorEntityId, 1));
+                int (IInternalEntry entry) => ((InternalEntityEntry)(entry)).ReadRelationshipSnapshotValue<int>(lazyConstructorEntityId, 1));
             lazyConstructorEntityId.SetPropertyIndexes(
                 index: 1,
                 originalValueIndex: 1,
@@ -167,17 +179,23 @@ namespace TestNamespace
                 propertyAccessMode: PropertyAccessMode.Field);
 
             lazyConstructorEntity.SetGetter(
-                CompiledModelInMemoryTest.LazyConstructorEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(entity),
-                bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(entity) == null,
                 CompiledModelInMemoryTest.LazyConstructorEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(instance),
                 bool (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(instance) == null);
             lazyConstructorEntity.SetSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, CompiledModelInMemoryTest.LazyConstructorEntity value) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, CompiledModelInMemoryTest.LazyConstructorEntity value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(instance) = value;
+                    return instance;
+                });
             lazyConstructorEntity.SetMaterializationSetter(
-                (CompiledModelInMemoryTest.LazyPropertyDelegateEntity entity, CompiledModelInMemoryTest.LazyConstructorEntity value) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(entity) = value);
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyPropertyDelegateEntity instance, CompiledModelInMemoryTest.LazyConstructorEntity value) =>
+                {
+                    LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(instance) = value;
+                    return instance;
+                });
             lazyConstructorEntity.SetAccessors(
-                CompiledModelInMemoryTest.LazyConstructorEntity (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))),
-                CompiledModelInMemoryTest.LazyConstructorEntity (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Object))),
+                CompiledModelInMemoryTest.LazyConstructorEntity (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))),
+                CompiledModelInMemoryTest.LazyConstructorEntity (IInternalEntry entry) => LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(entry.Entity))),
                 null,
                 CompiledModelInMemoryTest.LazyConstructorEntity (IInternalEntry entry) => entry.GetCurrentValue<CompiledModelInMemoryTest.LazyConstructorEntity>(lazyConstructorEntity));
             lazyConstructorEntity.SetPropertyIndexes(
@@ -195,17 +213,23 @@ namespace TestNamespace
                 propertyAccessMode: PropertyAccessMode.Field);
 
             lazyPropertyDelegateEntity.SetGetter(
-                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyConstructorEntity entity) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(entity),
-                bool (CompiledModelInMemoryTest.LazyConstructorEntity entity) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(entity) == null,
                 CompiledModelInMemoryTest.LazyPropertyDelegateEntity (CompiledModelInMemoryTest.LazyConstructorEntity instance) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(instance),
                 bool (CompiledModelInMemoryTest.LazyConstructorEntity instance) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(instance) == null);
             lazyPropertyDelegateEntity.SetSetter(
-                (CompiledModelInMemoryTest.LazyConstructorEntity entity, CompiledModelInMemoryTest.LazyPropertyDelegateEntity value) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(entity) = value);
+                CompiledModelInMemoryTest.LazyConstructorEntity (CompiledModelInMemoryTest.LazyConstructorEntity instance, CompiledModelInMemoryTest.LazyPropertyDelegateEntity value) =>
+                {
+                    LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(instance) = value;
+                    return instance;
+                });
             lazyPropertyDelegateEntity.SetMaterializationSetter(
-                (CompiledModelInMemoryTest.LazyConstructorEntity entity, CompiledModelInMemoryTest.LazyPropertyDelegateEntity value) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(entity) = value);
+                CompiledModelInMemoryTest.LazyConstructorEntity (CompiledModelInMemoryTest.LazyConstructorEntity instance, CompiledModelInMemoryTest.LazyPropertyDelegateEntity value) =>
+                {
+                    LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(instance) = value;
+                    return instance;
+                });
             lazyPropertyDelegateEntity.SetAccessors(
-                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (IInternalEntry entry) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(((CompiledModelInMemoryTest.LazyConstructorEntity)(entry.Object))),
-                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (IInternalEntry entry) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(((CompiledModelInMemoryTest.LazyConstructorEntity)(entry.Object))),
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (IInternalEntry entry) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(((CompiledModelInMemoryTest.LazyConstructorEntity)(entry.Entity))),
+                CompiledModelInMemoryTest.LazyPropertyDelegateEntity (IInternalEntry entry) => LazyConstructorEntityUnsafeAccessors.LazyPropertyDelegateEntity(((CompiledModelInMemoryTest.LazyConstructorEntity)(entry.Entity))),
                 null,
                 CompiledModelInMemoryTest.LazyPropertyDelegateEntity (IInternalEntry entry) => entry.GetCurrentValue<CompiledModelInMemoryTest.LazyPropertyDelegateEntity>(lazyPropertyDelegateEntity));
             lazyPropertyDelegateEntity.SetPropertyIndexes(
@@ -228,7 +252,7 @@ namespace TestNamespace
             runtimeEntityType.SetOriginalValuesFactory(
                 ISnapshot (IInternalEntry source) =>
                 {
-                    var entity = ((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(source.Object));
+                    var structuralType = ((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(source.Entity));
                     return ((ISnapshot)(new Snapshot<int, int>(((ValueComparer<int>)(((IProperty)id).GetValueComparer())).Snapshot(source.GetCurrentValue<int>(id)), ((ValueComparer<int>)(((IProperty)lazyConstructorEntityId).GetValueComparer())).Snapshot(source.GetCurrentValue<int>(lazyConstructorEntityId)))));
                 });
             runtimeEntityType.SetStoreGeneratedValuesFactory(
@@ -242,17 +266,18 @@ namespace TestNamespace
             runtimeEntityType.SetRelationshipSnapshotFactory(
                 ISnapshot (IInternalEntry source) =>
                 {
-                    var entity = ((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(source.Object));
-                    return ((ISnapshot)(new Snapshot<int, int, object>(((ValueComparer<int>)(((IProperty)id).GetKeyValueComparer())).Snapshot(source.GetCurrentValue<int>(id)), ((ValueComparer<int>)(((IProperty)lazyConstructorEntityId).GetKeyValueComparer())).Snapshot(source.GetCurrentValue<int>(lazyConstructorEntityId)), LazyPropertyDelegateEntityUnsafeAccessors.LazyConstructorEntity(entity))));
+                    var structuralType = ((CompiledModelInMemoryTest.LazyPropertyDelegateEntity)(source.Entity));
+                    return ((ISnapshot)(new Snapshot<int, int, object>(((ValueComparer<int>)(((IProperty)id).GetKeyValueComparer())).Snapshot(source.GetCurrentValue<int>(id)), ((ValueComparer<int>)(((IProperty)lazyConstructorEntityId).GetKeyValueComparer())).Snapshot(source.GetCurrentValue<int>(lazyConstructorEntityId)), source.GetCurrentValue<CompiledModelInMemoryTest.LazyConstructorEntity>(lazyConstructorEntity))));
                 });
-            runtimeEntityType.Counts = new PropertyCounts(
+            runtimeEntityType.SetCounts(new PropertyCounts(
                 propertyCount: 2,
                 navigationCount: 1,
                 complexPropertyCount: 0,
+                complexCollectionCount: 0,
                 originalValueCount: 2,
                 shadowCount: 0,
                 relationshipCount: 3,
-                storeGeneratedCount: 2);
+                storeGeneratedCount: 2));
 
             Customize(runtimeEntityType);
         }

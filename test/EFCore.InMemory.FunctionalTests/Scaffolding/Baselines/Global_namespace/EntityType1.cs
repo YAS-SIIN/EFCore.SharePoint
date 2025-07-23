@@ -35,14 +35,20 @@ public partial class EntityType1
             valueGenerated: ValueGenerated.OnAdd,
             afterSaveBehavior: PropertySaveBehavior.Throw);
         id.SetGetter(
-            int (Dictionary<string, object> entity) => ((((IDictionary<string, object>)entity).ContainsKey("Id") ? entity["Id"] : null) == null ? 0 : ((int)((((IDictionary<string, object>)entity).ContainsKey("Id") ? entity["Id"] : null)))),
-            bool (Dictionary<string, object> entity) => (((IDictionary<string, object>)entity).ContainsKey("Id") ? entity["Id"] : null) == null,
             int (Dictionary<string, object> instance) => ((((IDictionary<string, object>)instance).ContainsKey("Id") ? instance["Id"] : null) == null ? 0 : ((int)((((IDictionary<string, object>)instance).ContainsKey("Id") ? instance["Id"] : null)))),
             bool (Dictionary<string, object> instance) => (((IDictionary<string, object>)instance).ContainsKey("Id") ? instance["Id"] : null) == null);
         id.SetSetter(
-            (Dictionary<string, object> entity, int value) => entity["Id"] = ((object)(value)));
+            Dictionary<string, object> (Dictionary<string, object> instance, int value) =>
+            {
+                instance["Id"] = ((object)(value));
+                return instance;
+            });
         id.SetMaterializationSetter(
-            (Dictionary<string, object> entity, int value) => entity["Id"] = ((object)(value)));
+            Dictionary<string, object> (Dictionary<string, object> instance, int value) =>
+            {
+                instance["Id"] = ((object)(value));
+                return instance;
+            });
         id.SetAccessors(
             int (IInternalEntry entry) =>
             {
@@ -53,13 +59,13 @@ public partial class EntityType1
                 else
                 {
                     {
-                        if (entry.FlaggedAsTemporary(0) && (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Object))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Object))["Id"] : null) == null)
+                        if (entry.FlaggedAsTemporary(0) && (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Entity))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Entity))["Id"] : null) == null)
                         {
                             return entry.ReadTemporaryValue<int>(0);
                         }
                         else
                         {
-                            var nullableValue = (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Object))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Object))["Id"] : null);
+                            var nullableValue = (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Entity))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Entity))["Id"] : null);
                             return (nullableValue == null ? default(int) : ((int)(nullableValue)));
                         }
                     }
@@ -67,11 +73,11 @@ public partial class EntityType1
             },
             int (IInternalEntry entry) =>
             {
-                var nullableValue = (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Object))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Object))["Id"] : null);
+                var nullableValue = (((IDictionary<string, object>)((Dictionary<string, object>)(entry.Entity))).ContainsKey("Id") ? ((Dictionary<string, object>)(entry.Entity))["Id"] : null);
                 return (nullableValue == null ? default(int) : ((int)(nullableValue)));
             },
             int (IInternalEntry entry) => entry.ReadOriginalValue<int>(id, 0),
-            int (IInternalEntry entry) => entry.ReadRelationshipSnapshotValue<int>(id, 0));
+            int (IInternalEntry entry) => ((InternalEntityEntry)(entry)).ReadRelationshipSnapshotValue<int>(id, 0));
         id.SetPropertyIndexes(
             index: 0,
             originalValueIndex: 0,
@@ -111,7 +117,7 @@ public partial class EntityType1
         runtimeEntityType.SetOriginalValuesFactory(
             ISnapshot (IInternalEntry source) =>
             {
-                var entity = ((Dictionary<string, object>)(source.Object));
+                var structuralType = ((Dictionary<string, object>)(source.Entity));
                 return ((ISnapshot)(new Snapshot<int>(((ValueComparer<int>)(((IProperty)id).GetValueComparer())).Snapshot(source.GetCurrentValue<int>(id)))));
             });
         runtimeEntityType.SetStoreGeneratedValuesFactory(
@@ -125,17 +131,18 @@ public partial class EntityType1
         runtimeEntityType.SetRelationshipSnapshotFactory(
             ISnapshot (IInternalEntry source) =>
             {
-                var entity = ((Dictionary<string, object>)(source.Object));
+                var structuralType = ((Dictionary<string, object>)(source.Entity));
                 return ((ISnapshot)(new Snapshot<int>(((ValueComparer<int>)(((IProperty)id).GetKeyValueComparer())).Snapshot(source.GetCurrentValue<int>(id)))));
             });
-        runtimeEntityType.Counts = new PropertyCounts(
+        runtimeEntityType.SetCounts(new PropertyCounts(
             propertyCount: 1,
             navigationCount: 0,
             complexPropertyCount: 0,
+            complexCollectionCount: 0,
             originalValueCount: 1,
             shadowCount: 0,
             relationshipCount: 1,
-            storeGeneratedCount: 1);
+            storeGeneratedCount: 1));
 
         Customize(runtimeEntityType);
     }

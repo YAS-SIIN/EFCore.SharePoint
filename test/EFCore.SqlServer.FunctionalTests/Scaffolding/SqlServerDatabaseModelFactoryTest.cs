@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Scaffolding.Metadata;
 using Microsoft.EntityFrameworkCore.SqlServer.Diagnostics.Internal;
 using Microsoft.EntityFrameworkCore.SqlServer.Internal;
 using Microsoft.EntityFrameworkCore.SqlServer.Metadata.Internal;
+using Microsoft.EntityFrameworkCore.SqlServer.Storage.Internal;
 
 // ReSharper disable InconsistentNaming
 
@@ -1593,8 +1594,8 @@ IF NOT EXISTS (
 
     IF @fg_name IS NULL
         BEGIN
-        SET @fg_name = @db_name + N'_MODFG';
-        EXEC(N'ALTER DATABASE CURRENT ADD FILEGROUP [' + @fg_name + '] CONTAINS MEMORY_OPTIMIZED_DATA;');
+        SET @fg_name = QUOTENAME(@db_name + N'_MODFG');
+        EXEC(N'ALTER DATABASE CURRENT ADD FILEGROUP ' + @fg_name + ' CONTAINS MEMORY_OPTIMIZED_DATA;');
         END
 
     DECLARE @path nvarchar(max);
@@ -1609,7 +1610,7 @@ IF NOT EXISTS (
     EXEC(N'
         ALTER DATABASE CURRENT
         ADD FILE (NAME=''' + @filename + ''', filename=''' + @new_path + ''')
-        TO FILEGROUP [' + @fg_name + '];')
+        TO FILEGROUP ' + @fg_name + ';')
     END
 END
 
@@ -5723,6 +5724,32 @@ CREATE TABLE DependentTable (
             @"
 DROP TABLE DependentTable;
 DROP TABLE PrincipalTable;");
+
+    #endregion
+
+    #region Types
+
+    [ConditionalFact]
+    [SqlServerCondition(SqlServerCondition.SupportsVectorType)]
+    public void Vector_type()
+        => Test(
+            "CREATE TABLE [dbo].[VectorTable] (vector VECTOR(3))",
+            tables: [],
+            schemas: [],
+            (dbModel, scaffoldingFactory) =>
+            {
+                var table = Assert.Single(dbModel.Tables);
+                var column = Assert.Single(table.Columns);
+                Assert.Equal("vector", column.Name);
+                Assert.Equal("vector(3)", column.StoreType);
+
+                var model = scaffoldingFactory.Create(dbModel, new ModelReverseEngineerOptions());
+                var entityType = Assert.Single(model.GetEntityTypes());
+                var property = Assert.Single(entityType.GetProperties());
+                Assert.Equal("Vector", property.Name);
+                Assert.True(property.GetTypeMapping() is SqlServerVectorTypeMapping { Size: 3 });
+            },
+            "DROP TABLE [dbo].[VectorTable]");
 
     #endregion
 

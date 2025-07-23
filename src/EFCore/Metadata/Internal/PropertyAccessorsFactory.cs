@@ -53,6 +53,7 @@ public class PropertyAccessorsFactory
             out var relationshipSnapshotGetter);
 
         return new PropertyAccessors(
+            propertyBase,
             currentValueGetter.Compile(),
             preStoreGeneratedCurrentValueGetter.Compile(),
             originalValueGetter?.Compile(),
@@ -93,6 +94,15 @@ public class PropertyAccessorsFactory
     private static readonly MethodInfo GenericCreateExpressions
         = typeof(PropertyAccessorsFactory).GetMethod(nameof(CreateExpressions), BindingFlags.Static | BindingFlags.NonPublic)!;
 
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public static readonly MethodInfo GetOrdinalsMethod
+        = typeof(IInternalEntry).GetMethod(nameof(IInternalEntry.GetOrdinals), Type.EmptyTypes)!;
+
     private static void CreateExpressions<TProperty>(
         IPropertyBase propertyBase,
         out Expression<Func<IInternalEntry, TProperty>> currentValueGetter,
@@ -110,7 +120,7 @@ public class PropertyAccessorsFactory
         IPropertyBase propertyBase,
         bool useStoreGeneratedValues)
     {
-        var entityClrType = propertyBase.DeclaringType.GetPropertyAccessRoot().ClrType;
+        var entityClrType = propertyBase.DeclaringType.ContainingEntityType.ClrType;
         var entryParameter = Expression.Parameter(typeof(IInternalEntry), "entry");
         var propertyIndex = propertyBase.GetIndex();
         var shadowIndex = propertyBase.GetShadowIndex();
@@ -122,21 +132,20 @@ public class PropertyAccessorsFactory
         {
             currentValueExpression = Expression.Call(
                 entryParameter,
-                InternalEntityEntry.MakeReadShadowValueMethod(typeof(TProperty)),
+                InternalEntryBase.MakeReadShadowValueMethod(typeof(TProperty)),
                 Expression.Constant(shadowIndex));
-
             hasSentinelValueExpression = currentValueExpression.MakeHasSentinel(propertyBase);
         }
         else
         {
             var convertedExpression = Expression.Convert(
-                Expression.Property(entryParameter, nameof(IInternalEntry.Object)),
+                Expression.Property(entryParameter, nameof(IInternalEntry.Entity)),
                 entityClrType);
-
+            var indicesExpression = Expression.Call(entryParameter, GetOrdinalsMethod);
             var memberInfo = propertyBase.GetMemberInfo(forMaterialization: false, forSet: false);
 
             currentValueExpression = CreateMemberAccess(
-                propertyBase, convertedExpression, memberInfo, fromContainingType: false);
+                propertyBase, convertedExpression, indicesExpression, memberInfo, fromDeclaringType: false, fromEntity: true);
             hasSentinelValueExpression = currentValueExpression.MakeHasSentinel(propertyBase);
 
             if (currentValueExpression.Type != typeof(TProperty))
@@ -178,22 +187,22 @@ public class PropertyAccessorsFactory
             currentValueExpression = Expression.Condition(
                 Expression.Call(
                     entryParameter,
-                    InternalEntityEntry.FlaggedAsStoreGeneratedMethod,
+                    InternalEntryBase.FlaggedAsStoreGeneratedMethod,
                     Expression.Constant(propertyIndex)),
                 Expression.Call(
                     entryParameter,
-                    InternalEntityEntry.MakeReadStoreGeneratedValueMethod(typeof(TProperty)),
+                    InternalEntryBase.MakeReadStoreGeneratedValueMethod(typeof(TProperty)),
                     Expression.Constant(storeGeneratedIndex)),
                 Expression.Condition(
                     Expression.AndAlso(
                         Expression.Call(
                             entryParameter,
-                            InternalEntityEntry.FlaggedAsTemporaryMethod,
+                            InternalEntryBase.FlaggedAsTemporaryMethod,
                             Expression.Constant(propertyIndex)),
                         hasSentinelValueExpression),
                     Expression.Call(
                         entryParameter,
-                        InternalEntityEntry.MakeReadTemporaryValueMethod(typeof(TProperty)),
+                        InternalEntryBase.MakeReadTemporaryValueMethod(typeof(TProperty)),
                         Expression.Constant(storeGeneratedIndex)),
                     currentValueExpression));
         }
@@ -212,7 +221,7 @@ public class PropertyAccessorsFactory
             originalValuesIndex >= 0
                 ? Expression.Call(
                     entryParameter,
-                    InternalEntityEntry.MakeReadOriginalValueMethod(typeof(TProperty)),
+                    InternalEntryBase.MakeReadOriginalValueMethod(typeof(TProperty)),
                     Expression.Constant(property),
                     Expression.Constant(originalValuesIndex))
                 : Expression.Block(
@@ -232,13 +241,13 @@ public class PropertyAccessorsFactory
         return Expression.Lambda<Func<IInternalEntry, TProperty>>(
             relationshipIndex >= 0
                 ? Expression.Call(
-                    entryParameter,
+                    Expression.Convert(entryParameter, typeof(InternalEntityEntry)),
                     InternalEntityEntry.MakeReadRelationshipSnapshotValueMethod(typeof(TProperty)),
                     Expression.Constant(propertyBase),
                     Expression.Constant(relationshipIndex))
                 : Expression.Call(
                     entryParameter,
-                    InternalEntityEntry.MakeGetCurrentValueMethod(typeof(TProperty)),
+                    InternalEntryBase.MakeGetCurrentValueMethod(typeof(TProperty)),
                     Expression.Constant(propertyBase)),
             entryParameter);
     }
@@ -261,9 +270,13 @@ public class PropertyAccessorsFactory
     public static Expression CreateMemberAccess(
         IPropertyBase? property,
         Expression instanceExpression,
+        Expression indicesExpression,
         MemberInfo memberInfo,
-        bool fromContainingType)
+        bool fromDeclaringType,
+        bool fromEntity)
     {
+        Check.DebugAssert(!fromEntity || !fromDeclaringType, "fromEntity and fromDeclaringType can't both be true");
+
         if (property?.IsIndexerProperty() == true)
         {
             Expression expression = Expression.MakeIndex(
@@ -281,15 +294,26 @@ public class PropertyAccessorsFactory
             return expression;
         }
 
-        if (!fromContainingType
-            && property?.DeclaringType is IComplexType complexType
-            && !complexType.ComplexProperty.IsCollection)
+        if (!fromDeclaringType
+            && property?.DeclaringType is IRuntimeComplexType complexType)
         {
-            instanceExpression = CreateMemberAccess(
-                complexType.ComplexProperty,
-                instanceExpression,
-                complexType.ComplexProperty.GetMemberInfo(forMaterialization: false, forSet: false),
-                fromContainingType);
+            switch (complexType.ComplexProperty)
+            {
+                case { IsCollection: true } complexProperty when fromEntity:
+                    instanceExpression = CreateComplexCollectionElementAccess(complexProperty, instanceExpression, indicesExpression, fromDeclaringType, fromEntity);
+                    break;
+                case { IsCollection: false } complexProperty:
+                    instanceExpression = CreateMemberAccess(
+                        complexProperty,
+                        instanceExpression,
+                        indicesExpression,
+                        complexProperty.GetMemberInfo(forMaterialization: false, forSet: false),
+                        fromDeclaringType,
+                        fromEntity);
+                    break;
+                default:
+                    return instanceExpression.MakeMemberAccess(memberInfo);
+            }
 
             if (!instanceExpression.Type.IsValueType
                 || instanceExpression.Type.IsNullableValueType())
@@ -297,10 +321,71 @@ public class PropertyAccessorsFactory
                 return Expression.Condition(
                     Expression.Equal(instanceExpression, Expression.Constant(null)),
                     Expression.Default(memberInfo.GetMemberType()),
-                    Expression.MakeMemberAccess(instanceExpression, memberInfo));
+                    instanceExpression.MakeMemberAccess(memberInfo));
             }
         }
 
-        return Expression.MakeMemberAccess(instanceExpression, memberInfo);
+        return instanceExpression.MakeMemberAccess(memberInfo);
+    }
+
+    private static readonly MethodInfo ComplexCollectionNotInitializedMethod
+        = typeof(CoreStrings).GetMethod(nameof(CoreStrings.ComplexCollectionNotInitialized), BindingFlags.Static | BindingFlags.Public)!;
+
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public static readonly ConstructorInfo InvalidOperationConstructor = typeof(InvalidOperationException).GetConstructor([typeof(string)])!;
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public static Expression CreateComplexCollectionElementAccess(
+        IComplexProperty complexProperty,
+        Expression instanceExpression,
+        Expression indicesExpression,
+        bool fromDeclaringType,
+        bool fromEntity)
+    {
+        instanceExpression = CreateMemberAccess(
+            complexProperty,
+            instanceExpression,
+            indicesExpression,
+            complexProperty.GetMemberInfo(forMaterialization: false, forSet: false),
+            fromDeclaringType,
+            fromEntity);
+
+        var throwExceptionExpression = Expression.Throw(
+            Expression.New(
+                InvalidOperationConstructor,
+                Expression.Call(
+                    ComplexCollectionNotInitializedMethod,
+                    Expression.Constant(complexProperty.DeclaringType.ShortNameChain()),
+                    Expression.Constant(complexProperty.Name))),
+            instanceExpression.Type);
+
+        instanceExpression = Expression.Condition(
+            Expression.Equal(instanceExpression, Expression.Constant(null, instanceExpression.Type)),
+            throwExceptionExpression,
+            instanceExpression);
+
+        var collectionDepth = ((IRuntimeComplexType)complexProperty.ComplexType).CollectionDepth - 1;
+        var indexExpression = Expression.MakeIndex(
+            indicesExpression,
+            indicesExpression.Type.GetProperty("Item"),
+            [Expression.Constant(collectionDepth)]);
+
+        instanceExpression = Expression.MakeIndex(
+            instanceExpression,
+            instanceExpression.Type.GetProperty("Item"),
+            [indexExpression]);
+
+        return instanceExpression;
     }
 }

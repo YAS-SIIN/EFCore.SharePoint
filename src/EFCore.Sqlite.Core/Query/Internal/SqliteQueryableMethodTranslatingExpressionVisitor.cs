@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Sqlite.Internal;
@@ -321,7 +322,7 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
     /// </summary>
     protected override ShapedQueryExpression TransformJsonQueryToTable(JsonQueryExpression jsonQueryExpression)
     {
-        var entityType = jsonQueryExpression.EntityType;
+        var structuralType = jsonQueryExpression.StructuralType;
         var textTypeMapping = _typeMappingSource.FindMapping(typeof(string));
 
         // TODO: Refactor this out
@@ -374,14 +375,14 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
         var jsonColumn = selectExpression.CreateColumnExpression(
             jsonEachExpression, JsonEachValueColumnName, typeof(string), _typeMappingSource.FindMapping(typeof(string))); // TODO: nullable?
 
-        var containerColumnName = entityType.GetContainerColumnName();
+        var containerColumnName = structuralType.GetContainerColumnName();
         Check.DebugAssert(containerColumnName is not null, "JsonQueryExpression to entity type without a container column name");
 
         // First step: build a SelectExpression that will execute json_each and project all properties and navigations out, e.g.
         // (SELECT value ->> 'a' AS a, value ->> 'b' AS b FROM json_each(c."JsonColumn", '$.Something.SomeCollection')
 
         // We're only interested in properties which actually exist in the JSON, filter out uninteresting shadow keys
-        foreach (var property in entityType.GetPropertiesInHierarchy())
+        foreach (var property in structuralType.GetPropertiesInHierarchy())
         {
             if (property.GetJsonPropertyName() is string jsonPropertyName)
             {
@@ -399,24 +400,29 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
             }
         }
 
-        foreach (var navigation in jsonQueryExpression.EntityType.GetNavigationsInHierarchy()
-                     .Where(
-                         n => n.ForeignKey.IsOwnership
-                             && n.TargetEntityType.IsMappedToJson()
-                             && n.ForeignKey.PrincipalToDependent == n))
+        if (jsonQueryExpression.StructuralType is IEntityType entityType)
         {
-            var jsonNavigationName = navigation.TargetEntityType.GetJsonPropertyName();
-            Check.DebugAssert(jsonNavigationName is not null, "Invalid navigation found on JSON-mapped entity");
+            foreach (var navigation in entityType.GetNavigationsInHierarchy()
+                         .Where(
+                             n => n.ForeignKey.IsOwnership
+                                 && n.TargetEntityType.IsMappedToJson()
+                                 && n.ForeignKey.PrincipalToDependent == n))
+            {
+                var jsonNavigationName = navigation.TargetEntityType.GetJsonPropertyName();
+                Check.DebugAssert(jsonNavigationName is not null, "Invalid navigation found on JSON-mapped entity");
 
-            var projectionMember = new ProjectionMember().Append(new FakeMemberInfo(jsonNavigationName));
+                var projectionMember = new ProjectionMember().Append(new FakeMemberInfo(jsonNavigationName));
 
-            propertyJsonScalarExpression[projectionMember] = new JsonScalarExpression(
-                jsonColumn,
-                new[] { new PathSegment(jsonNavigationName) },
-                typeof(string),
-                textTypeMapping,
-                !navigation.ForeignKey.IsRequiredDependent);
+                propertyJsonScalarExpression[projectionMember] = new JsonScalarExpression(
+                    jsonColumn,
+                    [new PathSegment(jsonNavigationName)],
+                    typeof(string),
+                    textTypeMapping,
+                    !navigation.ForeignKey.IsRequiredDependent);
+            }
         }
+
+        // TODO: also add JsonScalarExpressions for complex properties, not just owned entities. #36296.
 
         selectExpression.ReplaceProjection(propertyJsonScalarExpression);
 
@@ -450,7 +456,7 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
         return new ShapedQueryExpression(
             newOuterSelectExpression,
             new RelationalStructuralTypeShaperExpression(
-                jsonQueryExpression.EntityType,
+                jsonQueryExpression.StructuralType,
                 new ProjectionBindingExpression(
                     newOuterSelectExpression,
                     new ProjectionMember(),
@@ -469,29 +475,59 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
         Expression index,
         bool returnDefault)
     {
-        if (!returnDefault
-            && source.QueryExpression is SelectExpression
-            {
-                Tables:
-                [
-                    TableValuedFunctionExpression
-                {
-                    Name: "json_each", Schema: null, IsBuiltIn: true, Arguments: [var jsonArrayColumn]
-                } jsonEachExpression
-                ],
-                Predicate: null,
-                GroupBy: [],
-                Having: null,
-                IsDistinct: false,
-                Orderings: [{ Expression: ColumnExpression { Name: JsonEachKeyColumnName } orderingColumn, IsAscending: true }],
-                Limit: null,
-                Offset: null
-            } selectExpression
-            && orderingColumn.TableAlias == jsonEachExpression.Alias
-            && TranslateExpression(index) is { } translatedIndex)
+        if (!returnDefault)
         {
-            // Index on JSON array
+            switch (source.QueryExpression)
+            {
+                // index on parameter using a column
+                // translate via JSON because it is a better translation
+                case SelectExpression
+                {
+                    Tables: [ValuesExpression { ValuesParameter: { } valuesParameter }],
+                    Predicate: null,
+                    GroupBy: [],
+                    Having: null,
+                    IsDistinct: false,
+#pragma warning disable EF1001
+                    Orderings: [{ Expression: ColumnExpression { Name: ValuesOrderingColumnName }, IsAscending: true }],
+#pragma warning restore EF1001
+                    Limit: null,
+                    Offset: null
+                } selectExpression
+                when TranslateExpression(index) is { } translatedIndex
+                    && TryTranslate(selectExpression, valuesParameter, translatedIndex, out var result):
+                    return result;
 
+                // Index on JSON array
+                case SelectExpression
+                {
+                    Tables: [TableValuedFunctionExpression
+                    {
+                        Name: "json_each", Schema: null, IsBuiltIn: true, Arguments: [var jsonArrayColumn]
+                    } jsonEachExpression],
+                    Predicate: null,
+                    GroupBy: [],
+                    Having: null,
+                    IsDistinct: false,
+                    Orderings: [{ Expression: ColumnExpression { Name: JsonEachKeyColumnName } orderingColumn, IsAscending: true }],
+                    Limit: null,
+                    Offset: null
+                } selectExpression
+                when orderingColumn.TableAlias == jsonEachExpression.Alias
+                    && TranslateExpression(index) is { } translatedIndex
+                    && TryTranslate(selectExpression, jsonArrayColumn, translatedIndex, out var result):
+                    return result;
+            }
+        }
+
+        return base.TranslateElementAtOrDefault(source, index, returnDefault);
+
+        bool TryTranslate(
+            SelectExpression selectExpression,
+            SqlExpression jsonArrayColumn,
+            SqlExpression translatedIndex,
+            [NotNullWhen(true)]out ShapedQueryExpression? result)
+        {
             // Extract the column projected out of the source, and simplify the subquery to a simple JsonScalarExpression
             var shaperExpression = source.ShaperExpression;
             if (shaperExpression is UnaryExpression { NodeType: ExpressionType.Convert } unaryExpression
@@ -520,12 +556,14 @@ public class SqliteQueryableMethodTranslatingExpressionVisitor : RelationalQuery
                 }
 
 #pragma warning disable EF1001
-                return source.UpdateQueryExpression(new SelectExpression(translation, _sqlAliasManager));
+                result = source.UpdateQueryExpression(new SelectExpression(translation, _sqlAliasManager));
 #pragma warning restore EF1001
+                return true;
             }
-        }
 
-        return base.TranslateElementAtOrDefault(source, index, returnDefault);
+            result = default;
+            return false;
+        }
     }
 
     /// <summary>

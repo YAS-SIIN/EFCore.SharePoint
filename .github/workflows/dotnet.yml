@@ -22,11 +22,11 @@ jobs:
 
       # Step 3: Restore dependencies
       - name: Restore dependencies
-        run: .restore
+        run: restore
 
       # Step 4: Build the project
       - name: Build
-        run: .build
+        run: build
 
        # Step 5: Pack the project
       - name: Pack

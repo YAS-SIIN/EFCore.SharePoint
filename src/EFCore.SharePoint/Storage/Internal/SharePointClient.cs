@@ -129,11 +129,11 @@ public class SharePointClient : ISharePointClient, IDisposable
     public async Task<JsonDocument> ExecuteQueryAsync(string query, CancellationToken cancellationToken = default)
     {
         var url = $"{_siteUrl.TrimEnd('/')}/_api/{query.TrimStart('/')}";
-        var response = await _httpClient.GetAsync(url, cancellationToken);
+        var response = await _httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
         
         response.EnsureSuccessStatusCode();
         
-        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         return JsonDocument.Parse(content);
     }
 
@@ -172,7 +172,7 @@ public class SharePointClient : ISharePointClient, IDisposable
         var queryString = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
         var query = $"web/lists/getbytitle('{Uri.EscapeDataString(listName)}')/items{queryString}";
         
-        return await ExecuteQueryAsync(query, cancellationToken);
+        return await ExecuteQueryAsync(query, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -191,10 +191,10 @@ public class SharePointClient : ISharePointClient, IDisposable
         var json = JsonSerializer.Serialize(itemData);
         var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
         
-        var response = await _httpClient.PostAsync(url, content, cancellationToken);
+        var response = await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         
-        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         return JsonDocument.Parse(responseContent);
     }
 
@@ -222,10 +222,10 @@ public class SharePointClient : ISharePointClient, IDisposable
         };
         request.Headers.Add("IF-MATCH", "*");
         
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         
-        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+        var responseContent = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         return JsonDocument.Parse(responseContent);
     }
 
@@ -245,7 +245,7 @@ public class SharePointClient : ISharePointClient, IDisposable
         var request = new HttpRequestMessage(HttpMethod.Delete, url);
         request.Headers.Add("IF-MATCH", "*");
         
-        var response = await _httpClient.SendAsync(request, cancellationToken);
+        var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
     }
 

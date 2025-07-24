@@ -3,6 +3,7 @@
 
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http;
 
 namespace Microsoft.EntityFrameworkCore.SharePoint.Storage.Internal;
 
@@ -20,6 +21,16 @@ namespace Microsoft.EntityFrameworkCore.SharePoint.Storage.Internal;
 /// </remarks>
 public interface ISharePointConnection : IRelationalConnection
 {
+    /// <summary>
+    ///     The SharePoint site URL.
+    /// </summary>
+    string? SiteUrl { get; }
+
+    /// <summary>
+    ///     Gets the HTTP client for SharePoint REST API calls.
+    /// </summary>
+    HttpClient HttpClient { get; }
+
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
     ///     the same compatibility standards as public APIs. It may be changed or removed without notice in

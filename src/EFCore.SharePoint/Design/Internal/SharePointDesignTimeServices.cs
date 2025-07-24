@@ -1,6 +1,11 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Design.Internal;
+using Microsoft.EntityFrameworkCore.SharePoint.Scaffolding.Internal;
+using Microsoft.Extensions.DependencyInjection;
+
 [assembly: DesignTimeProviderServices("Microsoft.EntityFrameworkCore.SharePoint.Design.Internal.SharePointDesignTimeServices")]
 namespace Microsoft.EntityFrameworkCore.SharePoint.Design.Internal;
 

@@ -2,13 +2,10 @@
 
   <PropertyGroup>
     <TargetFramework>$(DefaultNetCoreTargetFramework)</TargetFramework>
-    <AssemblyName>EFCore.SharePoint.Tests</AssemblyName>
+    <AssemblyName>Microsoft.EntityFrameworkCore.SharePoint.Tests</AssemblyName>
     <RootNamespace>Microsoft.EntityFrameworkCore</RootNamespace>
+    <Nullable>disable</Nullable>
     <ImplicitUsings>true</ImplicitUsings>
-    <PreserveCompilationContext>true</PreserveCompilationContext>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
@@ -31,7 +28,7 @@
     <Using Include="Microsoft.EntityFrameworkCore.Migrations.Operations" />
     <Using Include="Microsoft.EntityFrameworkCore.Query" />
     <Using Include="Microsoft.EntityFrameworkCore.Scaffolding" />
-    <Using Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <Using Include="Microsoft.EntityFrameworkCore.SharePoint" />
     <Using Include="Microsoft.EntityFrameworkCore.Storage" />
     <Using Include="Microsoft.EntityFrameworkCore.Storage.ValueConversion" />
     <Using Include="Microsoft.EntityFrameworkCore.TestUtilities" />
@@ -45,7 +42,12 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\EFCore.SharePoint\EFCore.SharePoint.csproj" />
+    <ProjectReference Include="..\EFCore.Relational.Tests\EFCore.Relational.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Moq" />
   </ItemGroup>
 
 </Project>

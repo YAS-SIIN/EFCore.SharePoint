@@ -18,14 +18,29 @@ public class BasicUsageExample
     /// </summary>
     public class SharePointContext : DbContext
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SharePointContext"/> class.
+        /// </summary>
+        /// <param name="options">The options for this context.</param>
         public SharePointContext(DbContextOptions<SharePointContext> options)
             : base(options)
         {
         }
 
+        /// <summary>
+        /// Gets or sets the employees DbSet.
+        /// </summary>
         public DbSet<Employee> Employees { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the departments DbSet.
+        /// </summary>
         public DbSet<Department> Departments { get; set; }
 
+        /// <summary>
+        /// Configures the context to use SharePoint.
+        /// </summary>
+        /// <param name="optionsBuilder">The options builder.</param>
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             if (!optionsBuilder.IsConfigured)
@@ -35,6 +50,10 @@ public class BasicUsageExample
             }
         }
 
+        /// <summary>
+        /// Configures the model that was discovered by convention from the entity types.
+        /// </summary>
+        /// <param name="modelBuilder">The builder being used to construct the model for this context.</param>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -66,10 +85,29 @@ public class BasicUsageExample
     /// </summary>
     public class Employee
     {
+        /// <summary>
+        /// Gets or sets the employee ID.
+        /// </summary>
         public int Id { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the employee name.
+        /// </summary>
         public string Name { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Gets or sets the employee email address.
+        /// </summary>
         public string? Email { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the employee hire date.
+        /// </summary>
         public DateTime? HireDate { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the department ID.
+        /// </summary>
         public int? DepartmentId { get; set; }
     }
 
@@ -78,7 +116,14 @@ public class BasicUsageExample
     /// </summary>
     public class Department
     {
+        /// <summary>
+        /// Gets or sets the department ID.
+        /// </summary>
         public int Id { get; set; }
+        
+        /// <summary>
+        /// Gets or sets the department name.
+        /// </summary>
         public string Name { get; set; } = string.Empty;
     }
 
@@ -133,25 +178,25 @@ public class BasicUsageExample
             };
             
             context.Employees.Add(newEmployee);
-            await context.SaveChangesAsync();
+            await context.SaveChangesAsync().ConfigureAwait(false);
             Console.WriteLine($"Created employee: {newEmployee.Name}");
 
             // READ - Query employees
             var employees = await context.Employees
                 .Where(e => e.HireDate > DateTime.Now.AddMonths(-6))
                 .OrderBy(e => e.Name)
-                .ToListAsync();
+                .ToListAsync().ConfigureAwait(false);
             
             Console.WriteLine($"Found {employees.Count} recent hires");
 
             // UPDATE - Modify an employee
             var employee = await context.Employees
-                .FirstOrDefaultAsync(e => e.Name == "John Doe");
+                .FirstOrDefaultAsync(e => e.Name == "John Doe").ConfigureAwait(false);
             
             if (employee != null)
             {
                 employee.Email = "john.doe@company.com";
-                await context.SaveChangesAsync();
+                await context.SaveChangesAsync().ConfigureAwait(false);
                 Console.WriteLine($"Updated employee email: {employee.Email}");
             }
 
@@ -159,7 +204,7 @@ public class BasicUsageExample
             if (employee != null)
             {
                 context.Employees.Remove(employee);
-                await context.SaveChangesAsync();
+                await context.SaveChangesAsync().ConfigureAwait(false);
                 Console.WriteLine("Deleted employee");
             }
 
@@ -167,7 +212,7 @@ public class BasicUsageExample
             var departmentEmployeeCounts = await context.Employees
                 .GroupBy(e => e.DepartmentId)
                 .Select(g => new { DepartmentId = g.Key, Count = g.Count() })
-                .ToListAsync();
+                .ToListAsync().ConfigureAwait(false);
 
             foreach (var item in departmentEmployeeCounts)
             {
@@ -186,25 +231,43 @@ public class BasicUsageExample
     [Table("CustomEmployees")]
     public class AnnotatedEmployee
     {
+        /// <summary>
+        /// Gets or sets the employee ID.
+        /// </summary>
         [Key]
         [Column("ID")]
         public int Id { get; set; }
 
+        /// <summary>
+        /// Gets or sets the employee name.
+        /// </summary>
         [Required]
         [Column("Title")]
         [MaxLength(255)]
         public string Name { get; set; } = string.Empty;
 
+        /// <summary>
+        /// Gets or sets the employee email address.
+        /// </summary>
         [Column("Email")]
         [MaxLength(255)]
         public string? Email { get; set; }
 
+        /// <summary>
+        /// Gets or sets the employee hire date.
+        /// </summary>
         [Column("HireDate")]
         public DateTime? HireDate { get; set; }
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the employee is active.
+        /// </summary>
         [Column("IsActive")]
         public bool IsActive { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets the employee salary.
+        /// </summary>
         [Column("Salary")]
         public decimal? Salary { get; set; }
     }

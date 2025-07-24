@@ -3,6 +3,8 @@
 
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+using System.Text;
 
 namespace Microsoft.EntityFrameworkCore.SharePoint.Infrastructure.Internal;
 

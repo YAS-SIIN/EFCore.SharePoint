@@ -3,6 +3,9 @@
 
 namespace Microsoft.EntityFrameworkCore.SharePoint;
 
+/// <summary>
+/// OwnedNavigationTemporalTableBuilder implementation.
+/// </summary>
 public class OwnedNavigationTemporalTableBuilder
 {
 }

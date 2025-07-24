@@ -7,24 +7,6 @@ using Microsoft.EntityFrameworkCore.Storage;
 using System.Data.Common;
 using System.Net.Http;
 
-/// <summary>
-///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
-///     the same compatibility standards as public APIs. It may be changed or removed without notice in
-///     any release. You should only use it directly in your code with extreme caution and knowing that
-///     doing so can result in application failures when updating to a new Entity Framework Core release.
-/// </summary>
-public interface ISharePointConnection : IRelationalConnection
-{
-    /// <summary>
-    ///     The SharePoint site URL.
-    /// </summary>
-    string? SiteUrl { get; }
-
-    /// <summary>
-    ///     Gets the HTTP client for SharePoint REST API calls.
-    /// </summary>
-    HttpClient HttpClient { get; }
-}
 
 /// <summary>
 ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -63,10 +45,31 @@ public class SharePointConnection : RelationalConnection, ISharePointConnection
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
     ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
-    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     any release. You should only use it directly in your code with extreme caution and thinking that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
     public virtual HttpClient HttpClient => _httpClient;
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual ISharePointConnection CreateAdminConnection()
+    {
+        // For SharePoint, admin connection would use elevated privileges
+        // This is a placeholder implementation
+        return new SharePointConnection(Dependencies, _siteUrl);
+    }
+
+    /// <summary>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+    /// </summary>
+    public virtual bool IsMultipleActiveRequestsEnabled => true; // SharePoint REST API supports concurrent requests
 
     /// <summary>
     ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
@@ -89,12 +92,9 @@ public class SharePointConnection : RelationalConnection, ISharePointConnection
     ///     any release. You should only use it directly in your code with extreme caution and knowing that
     ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    protected override void Dispose(bool disposing)
+    public override void Dispose()
     {
-        if (disposing)
-        {
-            _httpClient?.Dispose();
-        }
-        base.Dispose(disposing);
+        _httpClient?.Dispose();
+        base.Dispose();
     }
 }

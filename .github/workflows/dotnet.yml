@@ -1,0 +1,37 @@
+name: Publish NuGet Package
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Setup .NET environment
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0' # Adjust based on your project
+
+      # Step 3: Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore /home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj 
+
+      # Step 4: Build the project
+      - name: Build
+        run: dotnet build /home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj --configuration Release --no-restore
+
+       # Step 5: Pack the project
+      - name: Pack
+        run: dotnet pack /home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj --configuration Release --no-build -o ./packages
+
+      # Step 6: Publish package to GitHub Packages
+      - name: Publish to GitHub Packages
+        run: dotnet nuget push ./packages/*.nupkg --api-key ${{ secrets.FOR_NUGETPACKAGE }} --source "https://nuget.pkg.github.com/YAS-SIIN/index.json"

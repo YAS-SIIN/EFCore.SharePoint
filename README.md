@@ -1,133 +1,238 @@
-# Repository
+# EFCore.SharePoint
 
-[![build status](https://img.shields.io/azure-devops/build/dnceng-public/public/17/main)](https://dev.azure.com/dnceng-public/public/_build?definitionId=17) [![test results](https://img.shields.io/azure-devops/tests/dnceng-public/public/17/main)](https://dev.azure.com/dnceng-public/public/_build?definitionId=17)
+Entity Framework Core provider for SharePoint lists that enables EF Core to treat SharePoint lists as relational tables.
 
-This repository is home to the following [.NET Foundation](https://dotnetfoundation.org/) projects. These projects are maintained by [Microsoft](https://github.com/microsoft) and licensed under the [MIT License](LICENSE.txt).
+## Features
 
-* [Entity Framework Core](#entity-framework-core)
-* [Microsoft.Data.Sqlite](#microsoftdatasqlite)
+- **SharePoint Online Support**: Connect to SharePoint Online sites using modern authentication
+- **List-as-Table Mapping**: Map SharePoint lists to Entity Framework entities
+- **CRUD Operations**: Support for Create, Read, Update, Delete operations on SharePoint list items
+- **Query Translation**: Translate LINQ queries to SharePoint REST API calls
+- **Authentication Options**: Support for various authentication methods including client credentials
 
-## <img alt="EF" src="./logo/ef-logo.png" width="32"/> Entity Framework Core
+## Usage
 
-[![latest version](https://img.shields.io/nuget/v/Microsoft.EntityFrameworkCore)](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore) [![preview version](https://img.shields.io/nuget/vpre/Microsoft.EntityFrameworkCore)](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore/absoluteLatest) [![downloads](https://img.shields.io/nuget/dt/Microsoft.EntityFrameworkCore)](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore)
+### Basic Setup
 
-EF Core is a modern object-database mapper for .NET. It supports LINQ queries, change tracking, updates, and schema migrations. EF Core works with SQL Server, Azure SQL Database, SQLite, Azure Cosmos DB, MariaDB, MySQL, PostgreSQL, and other databases through a provider plugin API.
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
-### Installation
-
-EF Core is available on [NuGet](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore). Install the provider package corresponding to your target database. See the [list of providers](https://docs.microsoft.com/ef/core/providers/) in the docs for additional databases.
-
-```sh
-dotnet add package Microsoft.EntityFrameworkCore.SqlServer
-dotnet add package Microsoft.EntityFrameworkCore.Sqlite
-dotnet add package Microsoft.EntityFrameworkCore.Cosmos
-```
-
-Use the `--version` option to specify a [preview version](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore/absoluteLatest) to install.
-
-### Daily builds
-
-We recommend using the [daily builds](docs/DailyBuilds.md) to get the latest code and provide feedback on EF Core. These builds contain latest features and bug fixes; previews and official releases lag significantly behind.
-
-### Basic usage
-
-The following code demonstrates basic usage of EF Core. For a full tutorial configuring the `DbContext`, defining the model, and creating the database, see [getting started](https://docs.microsoft.com/ef/core/get-started/) in the docs.
-
-```cs
-using var db = new BloggingContext();
-
-// Inserting data into the database
-db.Add(new Blog { Url = "http://blogs.msdn.com/adonet" });
-db.SaveChanges();
-
-// Querying
-var blog = db.Blogs
-    .OrderBy(b => b.BlogId)
-    .First();
-
-// Updating
-blog.Url = "https://devblogs.microsoft.com/dotnet";
-blog.Posts.Add(
-    new Post
-    {
-        Title = "Hello World",
-        Content = "I wrote an app using EF Core!"
-    });
-db.SaveChanges();
-
-// Deleting
-db.Remove(blog);
-db.SaveChanges();
-```
-
-### Build from source
-
-Most people use EF Core by installing pre-built NuGet packages, as shown above. Alternatively, [the code can be built and packages can be created directly on your development machine](./docs/getting-and-building-the-code.md).
-
-### Contributing
-
-We welcome community pull requests for bug fixes, enhancements, and documentation. See [How to contribute](./.github/CONTRIBUTING.md) for more information.
-
-### Getting support
-
-If you have a specific question about using these projects, we encourage you to [ask it on Stack Overflow](https://stackoverflow.com/questions/tagged/entity-framework-core*?tab=Votes). If you encounter a bug or would like to request a feature, [submit an issue](https://github.com/dotnet/efcore/issues/new/choose). For more details, see [getting support](.github/SUPPORT.md).
-
-## Microsoft.Data.Sqlite
-
-[![latest version](https://img.shields.io/nuget/v/Microsoft.Data.Sqlite)](https://www.nuget.org/packages/Microsoft.Data.Sqlite) [![preview version](https://img.shields.io/nuget/vpre/Microsoft.Data.Sqlite)](https://www.nuget.org/packages/Microsoft.Data.Sqlite/absoluteLatest) [![downloads](https://img.shields.io/nuget/dt/Microsoft.Data.Sqlite.Core)](https://www.nuget.org/packages/Microsoft.Data.Sqlite)
-
-Microsoft.Data.Sqlite is a lightweight ADO.NET provider for SQLite. The EF Core provider for SQLite is built on top of this library. However, it can also be used independently or with other data access libraries.
-
-### Installation
-
-The latest stable version is available on [NuGet](https://www.nuget.org/packages/Microsoft.Data.Sqlite).
-
-```sh
-dotnet add package Microsoft.Data.Sqlite
-```
-
-Use the `--version` option to specify a [preview version](https://www.nuget.org/packages/Microsoft.Data.Sqlite/absoluteLatest) to install.
-
-### Daily builds
-
-We recommend using the [daily builds](docs/DailyBuilds.md) to get the latest code and provide feedback on Microsoft.Data.Sqlite. These builds contain the latest features and bug fixes; previews and official releases lag significantly behind.
-
-### Basic usage
-
-This library implements the common [ADO.NET](https://docs.microsoft.com/dotnet/framework/data/adonet/) abstractions for connections, commands, data readers, and so on. For more information, see [Microsoft.Data.Sqlite](https://docs.microsoft.com/dotnet/standard/data/sqlite/) on Microsoft Docs.
-
-```cs
-using var connection = new SqliteConnection("Data Source=Blogs.db");
-connection.Open();
-
-using var command = connection.CreateCommand();
-command.CommandText = "SELECT Url FROM Blogs";
-
-using var reader = command.ExecuteReader();
-while (reader.Read())
+public class SharePointContext : DbContext
 {
-    var url = reader.GetString(0);
+    public SharePointContext(DbContextOptions<SharePointContext> options)
+        : base(options)
+    {
+    }
+    
+    public DbSet<Employee> Employees { get; set; }
+    
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSharePoint("https://yourtenant.sharepoint.com/sites/yoursite");
+        }
+    }
+}
+
+public class Employee
+{
+    public int Id { get; set; }
+    public string Title { get; set; }
+    public string Email { get; set; }
+    public DateTime? HireDate { get; set; }
 }
 ```
 
-### Build from source
+### Dependency Injection
 
-Most people use Microsoft.Data.Sqlite by installing pre-built NuGet packages, as shown above. Alternatively, [the code can be built and packages can be created directly on your development machine](./docs/getting-and-building-the-code.md).
+```csharp
+services.AddSharePoint<SharePointContext>(
+    siteUrl: "https://yourtenant.sharepoint.com/sites/yoursite",
+    sharePointOptions => 
+    {
+        sharePointOptions.UseClientCredentials(true);
+        sharePointOptions.UseListName("Employees");
+    });
+```
 
-### Contributing
+### Configuration with Options
 
-We welcome community pull requests for bug fixes, enhancements, and documentation. See [How to contribute](./.github/CONTRIBUTING.md) for more information.
+```csharp
+services.AddDbContext<SharePointContext>(options =>
+{
+    options.UseSharePoint("https://yourtenant.sharepoint.com/sites/yoursite", sp =>
+    {
+        sp.UseSiteUrl("https://yourtenant.sharepoint.com/sites/yoursite");
+        sp.UseListName("MyCustomList");
+        sp.UseClientCredentials(true);
+    });
+});
+```
 
-### Getting support
+### Querying Data
 
-If you have a specific question about using these projects, we encourage you to [ask it on Stack Overflow](https://stackoverflow.com/questions/tagged/microsoft.data.sqlite). If you encounter a bug or would like to request a feature, [submit an issue](https://github.com/dotnet/efcore/issues/new/choose). For more details, see [getting support](.github/SUPPORT.md).
+```csharp
+using (var context = new SharePointContext())
+{
+    // Basic queries
+    var employees = await context.Employees.ToListAsync();
+    
+    // Filtered queries
+    var recentHires = await context.Employees
+        .Where(e => e.HireDate > DateTime.Now.AddMonths(-3))
+        .ToListAsync();
+    
+    // Ordering
+    var sortedEmployees = await context.Employees
+        .OrderBy(e => e.Title)
+        .ToListAsync();
+}
+```
 
-## See also
+### CRUD Operations
 
-* [Documentation](https://docs.microsoft.com/ef/core/)
-* [Roadmap](https://docs.microsoft.com/ef/core/what-is-new/roadmap)
-* [Weekly status updates](https://github.com/dotnet/efcore/issues/23884)
-* [Release planning process](https://docs.microsoft.com/ef/core/what-is-new/release-planning)
-* [How to write an EF Core provider](https://docs.microsoft.com/ef/core/providers/writing-a-provider)
-* [Security](./docs/security.md)
-* [Code of conduct](.github/CODE_OF_CONDUCT.md)
+```csharp
+using (var context = new SharePointContext())
+{
+    // Create
+    var newEmployee = new Employee
+    {
+        Title = "John Doe",
+        Email = "john.doe@example.com",
+        HireDate = DateTime.Now
+    };
+    context.Employees.Add(newEmployee);
+    await context.SaveChangesAsync();
+    
+    // Update
+    var employee = await context.Employees.FirstAsync(e => e.Title == "John Doe");
+    employee.Email = "john.doe@company.com";
+    await context.SaveChangesAsync();
+    
+    // Delete
+    context.Employees.Remove(employee);
+    await context.SaveChangesAsync();
+}
+```
+
+## Configuration Options
+
+### SharePoint Site Configuration
+
+- **SiteUrl**: The URL of the SharePoint site
+- **ListName**: Default list name for entities (can be overridden per entity)
+- **UseClientCredentials**: Enable client credentials authentication
+
+### Entity Mapping
+
+Map entities to specific SharePoint lists using data annotations or Fluent API:
+
+```csharp
+[Table("CustomListName")]
+public class Employee
+{
+    [Key]
+    [Column("ID")]
+    public int Id { get; set; }
+    
+    [Column("Title")]
+    public string Name { get; set; }
+    
+    [Column("Email")]
+    public string EmailAddress { get; set; }
+}
+```
+
+Or using Fluent API:
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    modelBuilder.Entity<Employee>(entity =>
+    {
+        entity.ToTable("CustomListName");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.Id).HasColumnName("ID");
+        entity.Property(e => e.Name).HasColumnName("Title");
+        entity.Property(e => e.EmailAddress).HasColumnName("Email");
+    });
+}
+```
+
+## Authentication
+
+### Client Credentials Flow
+
+For server-to-server authentication:
+
+```csharp
+optionsBuilder.UseSharePoint(siteUrl, sp =>
+{
+    sp.UseClientCredentials(true);
+});
+```
+
+### User Authentication
+
+For applications requiring user context:
+
+```csharp
+optionsBuilder.UseSharePoint(siteUrl, sp =>
+{
+    sp.UseClientCredentials(false); // Default
+});
+```
+
+## Limitations
+
+- **Schema Migrations**: SharePoint lists have limited schema modification capabilities
+- **Complex Relationships**: Limited support for complex entity relationships
+- **Transactions**: SharePoint doesn't support traditional database transactions
+- **Performance**: REST API calls may be slower than direct database queries
+
+## Supported Data Types
+
+- String (Text, Note)
+- Integer (Number)
+- DateTime (Date and Time)
+- Boolean (Yes/No)
+- Decimal (Number with decimals)
+- Guid (Lookup IDs)
+
+## Advanced Features
+
+### Custom List Operations
+
+```csharp
+public class CustomSharePointContext : SharePointContext
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+        
+        // Map different entities to different lists
+        modelBuilder.Entity<Employee>().ToTable("Employees");
+        modelBuilder.Entity<Department>().ToTable("Departments");
+    }
+}
+```
+
+### Query Optimization
+
+The provider automatically translates LINQ queries to efficient SharePoint REST API calls with proper OData parameters:
+
+- `Where` clauses become `$filter`
+- `OrderBy` becomes `$orderby`  
+- `Select` projections become `$select`
+- `Take` becomes `$top`
+- `Skip` becomes `$skip`
+
+## Contributing
+
+This provider follows the Entity Framework Core provider patterns and architecture. See the EF Core documentation for provider development guidelines.
+
+## License
+
+Licensed under the MIT License. See LICENSE file for details.

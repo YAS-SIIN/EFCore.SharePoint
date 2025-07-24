@@ -8,7 +8,7 @@ Entity Framework Core provider for SharePoint lists that enables EF Core to trea
 - **List-as-Table Mapping**: Map SharePoint lists to Entity Framework entities
 - **CRUD Operations**: Support for Create, Read, Update, Delete operations on SharePoint list items
 - **Query Translation**: Translate LINQ queries to SharePoint REST API calls
-- **Authentication Options**: Support for various authentication methods including client credentials
+- **Authentication Options**: Support for various authentication methods, including client credentials
 
 ## Usage
 

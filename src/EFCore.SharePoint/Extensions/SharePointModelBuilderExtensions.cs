@@ -30,7 +30,7 @@ public static class SharePointModelBuilderExtensions
     {
         Check.NotNull(listName, nameof(listName));
 
-        modelBuilder.Entity<TEntity>().ToTable(listName, t => t.IsTemporal(false));
+        modelBuilder.Entity<TEntity>().ToTable(listName);
         return modelBuilder;
     }
 

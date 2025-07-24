@@ -27,5 +27,6 @@
     <!--Workaround for IdentityServer4.EntityFramework v4.1.2-->    
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.16" />
     <PackageVersion Include="System.Text.Encodings.Web" Version="$(SystemTextEncodingsWebVersion)" />
+    <PackageVersion Include="Moq" Version="4.20.70" />
   </ItemGroup>
 </Project>

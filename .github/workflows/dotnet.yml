@@ -30,7 +30,7 @@ jobs:
 
        # Step 5: Pack the project
       - name: Pack
-        run: dotnet pack /home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj --configuration Release --no-build -o ./packages
+        run: dotnet pack src/EFCore.SharePoint/EFCore.SharePoint.csproj --configuration Release --no-build -o ./packages
 
       # Step 6: Publish package to GitHub Packages
       - name: Publish to GitHub Packages

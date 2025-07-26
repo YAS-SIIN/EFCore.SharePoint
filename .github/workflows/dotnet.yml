@@ -22,7 +22,7 @@ jobs:
 
       # Step 3: Restore dependencies
       - name: Restore dependencies
-        run: ./restore
+        run: restore.cmd
 
       # Step 4: Build the project
       - name: Build

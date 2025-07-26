@@ -22,7 +22,7 @@ jobs:
 
       # Step 3: Restore dependencies
       - name: Restore dependencies
-        run: dotnet restore
+        run: ./restore.sh
 
       # Step 4: Build the project
       - name: Build

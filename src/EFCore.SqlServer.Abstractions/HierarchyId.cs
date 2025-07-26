@@ -62,7 +62,16 @@ public class HierarchyId : IComparable<HierarchyId>
     /// <returns>A <see cref="HierarchyId" /> value.</returns>
     [return: NotNullIfNotNull(nameof(input))]
     public static HierarchyId? Parse(string? input)
-        => (HierarchyId?)SqlHierarchyId.Parse(input);
+    {
+        if (input == null)
+            return null;
+            
+        var sqlHierarchyId = SqlHierarchyId.Parse(input);
+        if (sqlHierarchyId.IsNull)
+            throw new ArgumentException($"Invalid HierarchyId string: '{input}'", nameof(input));
+            
+        return new HierarchyId(sqlHierarchyId);
+    }
 
     /// <summary>
     ///     Converts the <paramref name="parentHierarchyId" /> and <paramref name="parentId" /> of a node to a <see cref="HierarchyId" /> value.
@@ -93,7 +102,7 @@ public class HierarchyId : IComparable<HierarchyId>
         specificPath.Append(string.Join(".", parentId));
         specificPath.Append('/');
 
-        return Parse(specificPath.ToString());
+        return Parse(specificPath.ToString())!;
     }
 
     /// <inheritdoc />

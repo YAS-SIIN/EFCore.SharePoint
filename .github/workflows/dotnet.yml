@@ -22,11 +22,11 @@ jobs:
 
       # Step 3: Restore dependencies
       - name: Restore dependencies
-        run: ./restore.sh
+        run: ./restore.sh home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj
 
       # Step 4: Build the project
       - name: Build
-        run: dotnet build
+        run: ./build.sh home/runner/work/EFCore.SharePoint/EFCore.SharePoint/src/EFCore.SharePoint/EFCore.SharePoint.csproj
 
        # Step 5: Pack the project
       - name: Pack
